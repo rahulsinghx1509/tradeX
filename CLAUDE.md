@@ -27,5 +27,17 @@ Read these before doing any work:
 
 ## Current status
 
-- ✅ Repo created; metric catalog merged (PR #1).
-- 👉 Next: foundation docs + Milestone 1 (data → PostgreSQL → FastAPI → Next.js dashboard), then Milestone 0 verification with the owner's real Groww API key.
+- ✅ Repo created; metric catalog merged (PR #1); handoff docs merged (PR #2).
+- ✅ Milestone 1: pipeline (providers → data-quality → PostgreSQL → FastAPI → Next.js), Telegram sender,
+  market-hours collector. Tested with SAMPLE data only. Groww adapter written from docs, `NOT_VERIFIED`.
+- 👉 Next: Milestone 0 (`scripts/verify_provider_capabilities.py` with the owner's key), then Milestone 2 core metrics.
+
+## Code map
+
+- `backend/app/core/market_time.py` – IST sessions, holidays, complete-candle rules (UTC storage).
+- `backend/app/providers/` – adapter interface, `sample.py` (synthetic, `is_sample=TRUE`), `groww.py`.
+- `backend/app/services/` – `ingestion.py` (upserts), `data_quality.py`, `freshness.py`, `collector.py`.
+- `backend/app/api/routes/` – read-only GET endpoints only. A test fails if a non-GET route appears.
+- `backend/alembic/versions/` – schema migrations. Change models → `alembic revision --autogenerate`.
+- `scripts/` – backfill, collector, Telegram helpers, Groww capability check.
+- Tests: `cd backend && python -m pytest` (SQLite); set `TEST_DATABASE_URL` to run on PostgreSQL.

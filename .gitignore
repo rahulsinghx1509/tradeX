@@ -19,3 +19,9 @@ node_modules/
 Thumbs.db
 .vscode/
 ~$*.xlsx
+
+# Local outputs
+reports/
+*.db
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo

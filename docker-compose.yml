@@ -1,0 +1,18 @@
+# Optional: run PostgreSQL in Docker instead of installing it.
+#   docker compose up -d        (start)
+#   docker compose down         (stop; data is kept in the "pgdata" volume)
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tradex
+      POSTGRES_PASSWORD: change_me   # local only; use a strong password on a server
+      POSTGRES_DB: tradex
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:

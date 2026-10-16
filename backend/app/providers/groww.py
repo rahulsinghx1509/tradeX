@@ -1,0 +1,241 @@
+"""Groww Trade API adapter (real market data).
+
+Built from Groww's official Python SDK documentation (`growwapi` package):
+  https://groww.in/trade-api/docs/python-sdk
+  https://groww.in/trade-api/docs/python-sdk/backtesting   (historical candles)
+  https://groww.in/trade-api/docs/python-sdk/live-data     (quotes)
+
+Everything here follows the documentation, but NONE of it has been tested on the
+owner's account yet, so every capability is NOT_VERIFIED. Run
+`python scripts/verify_provider_capabilities.py` once credentials are in `.env`.
+
+Assumptions to verify (the verify script checks each one):
+- Candle timestamps without a timezone are Indian time (IST).
+- The BANKNIFTY index uses groww_symbol "NSE-BANKNIFTY" (the docs only show NSE-NIFTY).
+- The instrument CSV marks futures with instrument_type "FUT".
+
+This adapter only READS data. It never calls any order, modify or cancel method.
+"""
+
+from __future__ import annotations
+
+import time as _time
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from app.core.config import Settings
+from app.core.market_time import IST, bar_starts_for_day, to_ist
+from app.providers.base import (
+    Candle,
+    Capability,
+    InstrumentInfo,
+    MarketDataProvider,
+    ProviderError,
+    Snapshot,
+)
+
+# Values from the SDK "Annexures" page.
+INTERVALS = {"1h": "1hour", "1d": "1day"}
+# Max time range per candle request (from the backtesting docs): 1h / 1d -> 180 days.
+MAX_WINDOW = {"1h": timedelta(days=180), "1d": timedelta(days=180)}
+MIN_SECONDS_BETWEEN_CALLS = 0.15  # stays under the documented 10 requests/second
+
+
+def parse_candle_time(raw: Any) -> datetime:
+    """Groww candle timestamps: 'yyyy-MM-dd HH:mm:ss', ISO with 'T', or epoch seconds."""
+    if isinstance(raw, int | float):
+        return datetime.fromtimestamp(raw, tz=UTC)
+    text = str(raw).replace("T", " ")
+    dt = datetime.fromisoformat(text)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=IST)  # ASSUMPTION (NOT_VERIFIED): naive = IST
+    return dt.astimezone(UTC)
+
+
+def _num(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int(value: Any) -> int | None:
+    v = _num(value)
+    return None if v is None else int(v)
+
+
+def parse_candles(payload: dict, timeframe: str) -> list[Candle]:
+    """Turn a get_historical_candles response into Candle objects.
+
+    Each candle is [timestamp, open, high, low, close, volume, open_interest].
+    Missing values stay None. Daily candles are pinned to 09:15 IST of their day.
+    """
+    out = []
+    for row in payload.get("candles") or []:
+        row = list(row) + [None] * (7 - len(row))
+        t = parse_candle_time(row[0])
+        if timeframe == "1d":
+            t = bar_starts_for_day(to_ist(t).date(), "1d")[0]
+        out.append(Candle(t, _num(row[1]), _num(row[2]), _num(row[3]), _num(row[4]),
+                          _int(row[5]), _int(row[6])))
+    return out
+
+
+def parse_quote(payload: dict, received_at: datetime) -> Snapshot:
+    ohlc = payload.get("ohlc") or {}
+    ltt = payload.get("last_trade_time")  # epoch milliseconds per the docs
+    observed = datetime.fromtimestamp(ltt / 1000, tz=UTC) if ltt else received_at
+    return Snapshot(
+        observed_at=observed,
+        last_price=_num(payload.get("last_price")),
+        bid_price=_num(payload.get("bid_price")),
+        ask_price=_num(payload.get("offer_price")),
+        day_open=_num(ohlc.get("open")),
+        day_high=_num(ohlc.get("high")),
+        day_low=_num(ohlc.get("low")),
+        previous_close=_num(ohlc.get("close")),
+        volume=_int(payload.get("volume")),
+        open_interest=_int(payload.get("open_interest")),
+        oi_change=_int(payload.get("oi_day_change")),
+        implied_volatility=_num(payload.get("implied_volatility")),
+    )
+
+
+class GrowwProvider(MarketDataProvider):
+    name = "groww"
+    is_sample = False
+
+    def __init__(self, settings: Settings, client: Any | None = None):
+        self._settings = settings
+        self._client = client
+        self._last_call = 0.0
+
+    # ------------------------------------------------------------ connection
+    def _connect(self) -> Any:
+        if self._client is not None:
+            return self._client
+        s = self._settings
+        try:
+            from growwapi import GrowwAPI
+        except ImportError as exc:  # pragma: no cover
+            raise ProviderError("growwapi is not installed: pip install -r requirements.txt") from exc
+        try:
+            if s.groww_totp_token and s.groww_totp_secret:
+                import pyotp
+
+                totp = pyotp.TOTP(s.groww_totp_secret.get_secret_value()).now()
+                token = GrowwAPI.get_access_token(
+                    api_key=s.groww_totp_token.get_secret_value(), totp=totp
+                )
+            elif s.groww_api_key and s.groww_api_secret:
+                token = GrowwAPI.get_access_token(
+                    api_key=s.groww_api_key.get_secret_value(),
+                    secret=s.groww_api_secret.get_secret_value(),
+                )
+            else:
+                raise ProviderError(
+                    "No Groww credentials. Set GROWW_API_KEY + GROWW_API_SECRET "
+                    "(or GROWW_TOTP_TOKEN + GROWW_TOTP_SECRET) in .env"
+                )
+            self._client = GrowwAPI(token)
+        except ProviderError:
+            raise
+        except Exception as exc:
+            # Only the error type is reported, so a secret can never leak into logs.
+            raise ProviderError(f"Groww login failed ({type(exc).__name__}: {exc})") from None
+        return self._client
+
+    def _call(self, method: str, **kwargs: Any) -> Any:
+        client = self._connect()
+        wait = MIN_SECONDS_BETWEEN_CALLS - (_time.monotonic() - self._last_call)
+        if wait > 0:
+            _time.sleep(wait)
+        try:
+            return getattr(client, method)(**kwargs)
+        except Exception as exc:
+            raise ProviderError(f"Groww {method} failed ({type(exc).__name__}: {exc})") from None
+        finally:
+            self._last_call = _time.monotonic()
+
+    # ------------------------------------------------------------ interface
+    def list_instruments(self, underlyings: list[str], futures_expiries: int) -> list[InstrumentInfo]:
+        import pandas as pd
+
+        out = [
+            InstrumentInfo(
+                symbol=sym, instrument_type="INDEX", exchange="NSE", segment="CASH",
+                provider_symbol=f"NSE-{sym}", trading_symbol=sym,
+            )
+            for sym in underlyings
+        ]
+        df = self._call("get_all_instruments")
+        if df is None or len(df) == 0:
+            raise ProviderError("Groww instrument list is empty")
+        df = df.copy()
+        df["_expiry"] = pd.to_datetime(df["expiry_date"], errors="coerce").dt.date
+        today = to_ist(datetime.now(UTC)).date()
+        futs = df[
+            (df["exchange"] == "NSE")
+            & (df["segment"] == "FNO")
+            & (df["instrument_type"] == "FUT")
+            & (df["underlying_symbol"].isin(underlyings))
+            & (df["_expiry"] >= today)
+        ].sort_values("_expiry")
+        for sym in underlyings:
+            for _, row in futs[futs["underlying_symbol"] == sym].head(futures_expiries).iterrows():
+                out.append(
+                    InstrumentInfo(
+                        symbol=sym, instrument_type="FUTURE", exchange="NSE", segment="FNO",
+                        provider_symbol=str(row["groww_symbol"]),
+                        trading_symbol=str(row["trading_symbol"]),
+                        expiry_date=row["_expiry"],
+                        lot_size=_int(row.get("lot_size")),
+                    )
+                )
+        return out
+
+    def get_candles(
+        self, instrument: InstrumentInfo, timeframe: str, start: datetime, end: datetime
+    ) -> list[Candle]:
+        if timeframe not in INTERVALS:
+            raise ProviderError(f"Unsupported timeframe {timeframe}")
+        candles: list[Candle] = []
+        window_start = start
+        while window_start <= end:
+            window_end = min(window_start + MAX_WINDOW[timeframe], end)
+            payload = self._call(
+                "get_historical_candles",
+                exchange=instrument.exchange,
+                segment=instrument.segment,
+                groww_symbol=instrument.provider_symbol,
+                start_time=to_ist(window_start).strftime("%Y-%m-%d %H:%M:%S"),
+                end_time=to_ist(window_end).strftime("%Y-%m-%d %H:%M:%S"),
+                candle_interval=INTERVALS[timeframe],
+                timeout=30,
+            )
+            candles.extend(parse_candles(payload or {}, timeframe))
+            window_start = window_end + timedelta(seconds=1)
+        return [c for c in candles if start <= c.time <= end]
+
+    def get_snapshot(self, instrument: InstrumentInfo) -> Snapshot | None:
+        payload = self._call(
+            "get_quote",
+            exchange=instrument.exchange,
+            segment=instrument.segment,
+            trading_symbol=instrument.trading_symbol or instrument.symbol,
+        )
+        if not payload:
+            return None
+        return parse_quote(payload, datetime.now(UTC))
+
+    def capabilities(self) -> dict[str, Capability]:
+        # Stays NOT_VERIFIED until scripts/verify_provider_capabilities.py proves otherwise.
+        return {
+            "historical_candles_1d": Capability.NOT_VERIFIED,
+            "historical_candles_1h": Capability.NOT_VERIFIED,
+            "futures_open_interest": Capability.NOT_VERIFIED,
+            "quotes": Capability.NOT_VERIFIED,
+            "option_chain": Capability.NOT_VERIFIED,
+        }
