@@ -1,0 +1,19 @@
+# One image for the API, the collector and the one-off scripts.
+# The folder layout inside the image matches the repo (backend/ and scripts/),
+# so `python scripts/...` works exactly as it does on a laptop.
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=UTC
+WORKDIR /app
+
+COPY backend/requirements.txt backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+
+COPY backend backend
+COPY scripts scripts
+
+# Run as a normal user, not root.
+RUN useradd --create-home tradex && mkdir -p reports && chown tradex reports
+USER tradex
+
+CMD ["uvicorn", "app.main:app", "--app-dir", "backend", "--host", "0.0.0.0", "--port", "8000"]

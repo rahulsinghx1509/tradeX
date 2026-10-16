@@ -1,0 +1,12 @@
+# One front door on port 80: the API under /api and /health, the dashboard for everything else.
+# The server's firewall keeps port 80 closed to the internet; you reach it through Tailscale,
+# which encrypts the connection end to end.
+:80 {
+	@api path /api/* /health /docs /openapi.json
+	handle @api {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy dashboard:3000
+	}
+}

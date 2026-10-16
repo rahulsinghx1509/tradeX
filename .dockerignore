@@ -1,0 +1,11 @@
+# Keep secrets and bulky local folders out of Docker images.
+.env
+.env.*
+.git
+**/node_modules
+**/.next
+**/__pycache__
+**/.venv
+**/venv
+reports
+docs

@@ -1,0 +1,70 @@
+# TradeX on the server. Use deploy/tradex.sh instead of calling this directly;
+# it passes the repo's .env file in for you.
+name: tradex
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile.backend
+  image: tradex-backend
+  env_file: ../.env
+  environment:
+    # The database runs in its own container called "db"; this overrides any DATABASE_URL in .env.
+    DATABASE_URL: postgresql://tradex:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/tradex
+  volumes:
+    - ../reports:/app/reports
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tradex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: tradex
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradex -d tradex"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    # No "ports": the database is reachable only by the other containers.
+
+  migrate:
+    <<: *app
+    command: ["sh", "-c", "cd backend && alembic upgrade head"]
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    <<: *app
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  collector:
+    <<: *app
+    command: ["python", "scripts/run_collector.py"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    image: tradex-dashboard
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on: [api, dashboard]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
