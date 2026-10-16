@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from app.core.config import Settings
-from app.core.market_time import to_ist
+from app.core.market_time import IST, to_ist
 from app.providers.base import ProviderError
 from app.providers.groww import GrowwProvider, parse_candles, parse_quote
 from tests.conftest import NOW
@@ -123,3 +123,53 @@ def test_groww_without_credentials_gives_clear_error():
                                groww_totp_token=None, groww_totp_secret=None))
     with pytest.raises(ProviderError, match="No Groww credentials"):
         p.list_instruments(["NIFTY"], 1)
+
+
+def test_parse_groww_hourly_pins_first_candle_to_open():
+    # Groww stamps hourly candles on the clock: 09:00, 10:00, ... (seen on the owner's account).
+    rows = parse_candles({"candles": [["2026-10-12T09:00:00", 1, 2, 0.5, 1.5],
+                                      ["2026-10-12T10:00:00", 1, 2, 0.5, 1.5]]}, "1h")
+    assert [to_ist(r.time).strftime("%H:%M") for r in rows] == ["09:15", "10:00"]
+
+
+class RateLimitedGroww(FakeGroww):
+    def __init__(self, failures):
+        super().__init__()
+        self.failures = failures
+
+    def get_quote(self, **kw):
+        if self.failures:
+            self.failures -= 1
+            raise RuntimeError("Rate limit has breached for your request. Please try again later.")
+        return {"last_price": 1.0}
+
+
+def test_groww_retries_after_rate_limit(monkeypatch):
+    monkeypatch.setattr("app.providers.groww.RATE_LIMIT_BACKOFF", (0, 0))
+    p = GrowwProvider(Settings(), client=RateLimitedGroww(failures=2))
+    assert p.client().get_quote(exchange="NSE", segment="CASH", trading_symbol="NIFTY") == {"last_price": 1.0}
+
+
+def test_groww_gives_up_after_repeated_rate_limits(monkeypatch):
+    monkeypatch.setattr("app.providers.groww.RATE_LIMIT_BACKOFF", (0, 0))
+    p = GrowwProvider(Settings(), client=RateLimitedGroww(failures=3))
+    with pytest.raises(ProviderError, match="Rate limit"):
+        p.client().get_quote(exchange="NSE", segment="CASH", trading_symbol="NIFTY")
+
+
+def test_daily_reset_is_six_am_ist():
+    from app.providers.groww import last_daily_reset
+
+    before_six = datetime(2026, 10, 16, 5, 59, tzinfo=IST)
+    after_six = datetime(2026, 10, 16, 6, 1, tzinfo=IST)
+    assert to_ist(last_daily_reset(before_six)) == datetime(2026, 10, 15, 6, 0, tzinfo=IST)
+    assert to_ist(last_daily_reset(after_six)) == datetime(2026, 10, 16, 6, 0, tzinfo=IST)
+
+
+def test_groww_logs_in_again_after_daily_reset(monkeypatch):
+    p = GrowwProvider(Settings(), client=FakeGroww())
+    p._logged_in_at = datetime.now(UTC) - timedelta(hours=1)
+    monkeypatch.setattr("app.providers.groww.last_daily_reset", lambda now: now - timedelta(hours=2))
+    assert not p._session_expired()
+    monkeypatch.setattr("app.providers.groww.last_daily_reset", lambda now: now)
+    assert p._session_expired()

@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.market_time import to_ist
-from app.providers.groww import INTERVALS, parse_candles
+from app.providers.groww import INTERVALS, parse_candle_time, parse_candles
 
 S, U, X = "SUPPORTED", "UNSUPPORTED", "SOURCE_UNAVAILABLE"
 
@@ -84,9 +84,13 @@ class CapabilityChecker:
         candles = parse_candles(payload, tf)
         first_raw = raw[0][0]
         vol_null = sum(1 for c in candles if c.volume in (None, 0))
-        return S, (f"{len(raw)} candles; first raw timestamp={first_raw!r}; "
-                   f"first parsed IST={to_ist(candles[0].time).isoformat()}; "
-                   f"volume missing/zero in {vol_null}")
+        evidence = (f"{len(raw)} candles; first raw timestamp={first_raw!r}; "
+                    f"first parsed IST={to_ist(candles[0].time).isoformat()}; "
+                    f"volume missing/zero in {vol_null}")
+        if tf == "1h":
+            times = sorted({to_ist(parse_candle_time(r[0])).strftime("%H:%M") for r in raw})
+            evidence += f"; raw start times seen={times}"
+        return S, evidence
 
     def futures_oi(self, sym: str) -> tuple[str, str]:
         fut = self.ctx.get(f"fut_{sym}")

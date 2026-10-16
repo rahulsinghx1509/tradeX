@@ -4,7 +4,8 @@ Rules used everywhere in TradeX:
 - Store every timestamp in UTC. Show times in Asia/Kolkata (IST).
 - NSE equity / F&O session: 09:15 to 15:30 IST, Monday to Friday, except holidays.
 - A candle's `candle_time` is the START of the candle.
-    * 1h candles start at 09:15, 10:15, ... 15:15 (the last one is only 15 minutes long).
+    * 1h candles follow the clock, as Groww serves them: 09:15-10:00 (only 45 minutes),
+      then 10:00, 11:00, ... 15:00 (the last one is only 30 minutes long).
     * 1d candles are stored at 09:15 IST of the trading day.
 - A candle is "complete" only after its end time has passed. Incomplete candles
   are never stored, so historical analysis cannot peek into the future.
@@ -88,7 +89,7 @@ def bar_starts_for_day(d: date, timeframe: str) -> list[datetime]:
     if timeframe == "1d":
         return [open_utc]
     if timeframe == "1h":
-        starts, t = [], open_utc
+        starts, t = [open_utc], _next_clock_hour(open_utc)
         while t < close_utc:
             starts.append(t)
             t += timedelta(hours=1)
@@ -96,13 +97,19 @@ def bar_starts_for_day(d: date, timeframe: str) -> list[datetime]:
     raise ValueError(f"Unsupported timeframe: {timeframe}")
 
 
+def _next_clock_hour(dt: datetime) -> datetime:
+    """The next full IST hour after `dt` (09:15 -> 10:00), in UTC."""
+    ist = to_ist(dt).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    return ist.astimezone(UTC)
+
+
 def bar_end(bar_start: datetime, timeframe: str) -> datetime:
-    """When a candle closes. Hourly candles are cut off at the 15:30 close."""
+    """When a candle closes. Hourly candles end on the next full hour, or at the 15:30 close."""
     _, close_utc = session_bounds(to_ist(bar_start).date())
     if timeframe == "1d":
         return close_utc
     if timeframe == "1h":
-        return min(bar_start + timedelta(hours=1), close_utc)
+        return min(_next_clock_hour(bar_start), close_utc)
     raise ValueError(f"Unsupported timeframe: {timeframe}")
 
 

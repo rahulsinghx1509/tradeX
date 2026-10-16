@@ -12,8 +12,10 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend backend
 COPY scripts scripts
 
-# Run as a normal user, not root.
-RUN useradd --create-home tradex && mkdir -p reports && chown tradex reports
+# Run as a normal user, not root. The Groww SDK saves its instrument list inside its
+# own package folder, so that folder must be writable by this user.
+RUN useradd --create-home tradex && mkdir -p reports && chown tradex reports \
+    && chown -R tradex "$(python -c 'import growwapi, os; print(os.path.dirname(growwapi.__file__))')"
 USER tradex
 
 CMD ["uvicorn", "app.main:app", "--app-dir", "backend", "--host", "0.0.0.0", "--port", "8000"]
