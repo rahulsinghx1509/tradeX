@@ -1,0 +1,16 @@
+# TradeX backend dependencies (tested with Python 3.13; 3.11+ should work).
+# Install with:  pip install -r requirements.txt
+fastapi==0.143.2
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.1.4
+alembic==1.20.0
+psycopg[binary]==3.3.6
+pydantic-settings==2.16.0
+pandas==2.3.3
+numpy==2.5.4
+httpx==0.28.1
+# Windows has no built-in timezone database; this package provides Asia/Kolkata.
+tzdata>=2024.1
+# Official Groww Trade API SDK (https://groww.in/trade-api/docs/python-sdk)
+growwapi==1.5.0
+pyotp>=2.9

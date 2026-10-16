@@ -1,0 +1,6 @@
+# NSE trading holidays (equity and F&O segments).
+# Add each holiday as YYYY-MM-DD from NSE's official circular:
+#   https://www.nseindia.com/resources/exchange-communication-holidays
+# Until this list is filled in, holidays show up as "missing candle" warnings
+# in the data-quality log. That is expected and harmless.
+date,description
