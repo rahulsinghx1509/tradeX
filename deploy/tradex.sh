@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Everyday commands for TradeX on the server. Run from anywhere, e.g.:
+#   ~/tradex/deploy/tradex.sh status
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+dc() { docker compose --env-file .env -f deploy/docker-compose.yml "$@"; }
+# Runs a one-off Python script inside the backend image, with the same settings as the collector.
+script() { dc run --rm --no-deps collector python "scripts/$1" "${@:2}"; }
+
+case "${1:-help}" in
+  # Images are built one at a time so a 1 GB server doesn't run out of memory.
+  start)      dc build migrate && dc build dashboard && dc up -d --remove-orphans ;;
+  stop)       dc down ;;
+  restart)    dc restart "${@:2}" ;;
+  status)     dc ps ;;
+  logs)       dc logs --tail 100 -f "${@:2}" ;;
+  verify)     script verify_provider_capabilities.py && echo "Report: reports/provider_capability_report.md" ;;
+  backfill)   script backfill_candles.py "${@:2}" ;;
+  chat-id)    script telegram_chat_id.py ;;
+  test-alert) script send_test_alert.py ;;
+  backup)     deploy/backup.sh ;;
+  update)     deploy/update.sh --force ;;
+  *)
+    cat <<'HELP'
+Usage: deploy/tradex.sh <command>
+
+  start        build and start everything (safe to run again)
+  stop         stop everything (the database is kept)
+  restart X    restart one service, e.g. restart collector
+  status       show what is running
+  logs [X]     follow the logs, e.g. logs collector   (Ctrl+C to leave)
+  verify       Milestone 0: check what the Groww API really provides
+  backfill     load historical candles
+  chat-id      print your Telegram chat ID
+  test-alert   send a test Telegram message
+  backup       back up the database now
+  update       pull the latest code from GitHub and restart
+HELP
+    ;;
+esac

@@ -30,6 +30,7 @@ Read these before doing any work:
 - ✅ Repo created; metric catalog merged (PR #1); handoff docs merged (PR #2).
 - ✅ Milestone 1: pipeline (providers → data-quality → PostgreSQL → FastAPI → Next.js), Telegram sender,
   market-hours collector. Tested with SAMPLE data only. Groww adapter written from docs, `NOT_VERIFIED`.
+- ✅ Hosting chosen: AWS Lightsail Mumbai ($7 / 1 GB to start), everything in Docker Compose (`deploy/`), guide in `docs/05_CLOUD_SERVER_SETUP.md`.
 - 👉 Next: Milestone 0 (`scripts/verify_provider_capabilities.py` with the owner's key), then Milestone 2 core metrics.
 
 ## Code map
@@ -40,4 +41,6 @@ Read these before doing any work:
 - `backend/app/api/routes/` – read-only GET endpoints only. A test fails if a non-GET route appears.
 - `backend/alembic/versions/` – schema migrations. Change models → `alembic revision --autogenerate`.
 - `scripts/` – backfill, collector, Telegram helpers, Groww capability check.
+- `deploy/` – server Docker Compose (db, migrate, api, collector, dashboard, caddy), `tradex.sh` everyday commands,
+  setup, nightly backup and 5-minute auto-update from `main`. Merging to `main` deploys to the server.
 - Tests: `cd backend && python -m pytest` (SQLite); set `TEST_DATABASE_URL` to run on PostgreSQL.
