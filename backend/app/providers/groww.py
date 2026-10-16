@@ -9,9 +9,13 @@ Everything here follows the documentation, but NONE of it has been tested on the
 owner's account yet, so every capability is NOT_VERIFIED. Run
 `python scripts/verify_provider_capabilities.py` once credentials are in `.env`.
 
-Assumptions to verify (the verify script checks each one):
+Milestone 0 on the owner's account (2026-10-17) confirmed: login with TOTP, NIFTY and
+BANKNIFTY ("NSE-BANKNIFTY") daily and hourly candles, history back to 2020, index quotes
+and India VIX ("INDIAVIX"). Hourly candles come stamped 09:00, 10:00, ... (clock hours),
+so the first one of the day is pinned to the 09:15 open.
+
+Still to verify (the verify script checks each one):
 - Candle timestamps without a timezone are Indian time (IST).
-- The BANKNIFTY index uses groww_symbol "NSE-BANKNIFTY" (the docs only show NSE-NIFTY).
 - The instrument CSV marks futures with instrument_type "FUT".
 
 This adapter only READS data. It never calls any order, modify or cancel method.
@@ -24,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.config import Settings
-from app.core.market_time import IST, bar_starts_for_day, to_ist
+from app.core.market_time import IST, bar_starts_for_day, session_bounds, to_ist
 from app.providers.base import (
     Candle,
     Capability,
@@ -39,6 +43,27 @@ INTERVALS = {"1h": "1hour", "1d": "1day"}
 # Max time range per candle request (from the backtesting docs): 1h / 1d -> 180 days.
 MAX_WINDOW = {"1h": timedelta(days=180), "1d": timedelta(days=180)}
 MIN_SECONDS_BETWEEN_CALLS = 0.15  # stays under the documented 10 requests/second
+# Waits before retrying a call Groww refused with "rate limit" (seconds).
+RATE_LIMIT_BACKOFF = (2, 4, 8, 16)
+# Groww resets every login session daily at 06:00 IST, so log in again after that.
+DAILY_RESET_HOUR_IST = 6
+
+
+def is_rate_limited(exc: Exception) -> bool:
+    return type(exc).__name__ == "GrowwAPIRateLimitException" or "rate limit" in str(exc).lower()
+
+
+def is_auth_expired(exc: Exception) -> bool:
+    return type(exc).__name__ == "GrowwAPIAuthenticationException"
+
+
+def last_daily_reset(now: datetime) -> datetime:
+    """The most recent 06:00 IST at or before `now`."""
+    ist = to_ist(now)
+    reset = ist.replace(hour=DAILY_RESET_HOUR_IST, minute=0, second=0, microsecond=0)
+    if reset > ist:
+        reset -= timedelta(days=1)
+    return reset.astimezone(UTC)
 
 
 def parse_candle_time(raw: Any) -> datetime:
@@ -70,7 +95,8 @@ def parse_candles(payload: dict, timeframe: str) -> list[Candle]:
     """Turn a get_historical_candles response into Candle objects.
 
     Each candle is [timestamp, open, high, low, close, volume, open_interest].
-    Missing values stay None. Daily candles are pinned to 09:15 IST of their day.
+    Missing values stay None. Daily candles are pinned to 09:15 IST of their day, and
+    the first hourly candle (stamped 09:00 by Groww) is pinned to the 09:15 open.
     """
     out = []
     for row in payload.get("candles") or []:
@@ -78,6 +104,8 @@ def parse_candles(payload: dict, timeframe: str) -> list[Candle]:
         t = parse_candle_time(row[0])
         if timeframe == "1d":
             t = bar_starts_for_day(to_ist(t).date(), "1d")[0]
+        elif timeframe == "1h":
+            t = max(t, session_bounds(to_ist(t).date())[0])
         out.append(Candle(t, _num(row[1]), _num(row[2]), _num(row[3]), _num(row[4]),
                           _int(row[5]), _int(row[6])))
     return out
@@ -110,12 +138,14 @@ class GrowwProvider(MarketDataProvider):
     def __init__(self, settings: Settings, client: Any | None = None):
         self._settings = settings
         self._client = client
+        self._logged_in_at: datetime | None = None  # None for an injected (test) client
         self._last_call = 0.0
 
     # ------------------------------------------------------------ connection
     def _connect(self) -> Any:
-        if self._client is not None:
+        if self._client is not None and not self._session_expired():
             return self._client
+        self._client = None
         s = self._settings
         try:
             from growwapi import GrowwAPI
@@ -140,6 +170,7 @@ class GrowwProvider(MarketDataProvider):
                     "(or GROWW_TOTP_TOKEN + GROWW_TOTP_SECRET) in .env"
                 )
             self._client = GrowwAPI(token)
+            self._logged_in_at = datetime.now(UTC)
         except ProviderError:
             raise
         except Exception as exc:
@@ -147,17 +178,37 @@ class GrowwProvider(MarketDataProvider):
             raise ProviderError(f"Groww login failed ({type(exc).__name__}: {exc})") from None
         return self._client
 
+    def _session_expired(self) -> bool:
+        """True once Groww's daily 06:00 IST reset has passed since we logged in."""
+        if self._logged_in_at is None:
+            return False
+        return self._logged_in_at < last_daily_reset(datetime.now(UTC))
+
     def _call(self, method: str, **kwargs: Any) -> Any:
-        client = self._connect()
-        wait = MIN_SECONDS_BETWEEN_CALLS - (_time.monotonic() - self._last_call)
-        if wait > 0:
-            _time.sleep(wait)
-        try:
-            return getattr(client, method)(**kwargs)
-        except Exception as exc:
-            raise ProviderError(f"Groww {method} failed ({type(exc).__name__}: {exc})") from None
-        finally:
-            self._last_call = _time.monotonic()
+        """Call one SDK method: spaced out, retried on rate limits, re-logged-in once if expired."""
+        backoff = iter(RATE_LIMIT_BACKOFF)
+        relogged = False
+        while True:
+            client = self._connect()
+            wait = MIN_SECONDS_BETWEEN_CALLS - (_time.monotonic() - self._last_call)
+            if wait > 0:
+                _time.sleep(wait)
+            try:
+                return getattr(client, method)(**kwargs)
+            except Exception as exc:
+                if is_rate_limited(exc) and (delay := next(backoff, None)) is not None:
+                    _time.sleep(delay)
+                    continue
+                if is_auth_expired(exc) and not relogged and self._logged_in_at is not None:
+                    self._client, relogged = None, True
+                    continue
+                raise ProviderError(f"Groww {method} failed ({type(exc).__name__}: {exc})") from None
+            finally:
+                self._last_call = _time.monotonic()
+
+    def client(self) -> Any:
+        """The SDK client with this adapter's spacing, retries and re-login on every call."""
+        return _ManagedClient(self)
 
     # ------------------------------------------------------------ interface
     def list_instruments(self, underlyings: list[str], futures_expiries: int) -> list[InstrumentInfo]:
@@ -239,3 +290,13 @@ class GrowwProvider(MarketDataProvider):
             "quotes": Capability.NOT_VERIFIED,
             "option_chain": Capability.NOT_VERIFIED,
         }
+
+
+class _ManagedClient:
+    """Looks like the raw SDK client, but every method goes through GrowwProvider._call."""
+
+    def __init__(self, provider: GrowwProvider):
+        self._provider = provider
+
+    def __getattr__(self, method: str) -> Any:
+        return lambda **kwargs: self._provider._call(method, **kwargs)

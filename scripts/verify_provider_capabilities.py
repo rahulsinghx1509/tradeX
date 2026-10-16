@@ -21,11 +21,13 @@ from app.services.capability_check import CapabilityChecker, to_markdown
 
 
 def main() -> int:
+    provider = GrowwProvider(get_settings())
     try:
-        client = GrowwProvider(get_settings())._connect()
+        provider._connect()
     except ProviderError as exc:
         print(f"Cannot log in to Groww: {exc}")
         return 1
+    client = provider.client()  # spaced out and retried, so Groww's rate limit isn't hit
     now = datetime.now(UTC)
     rows = CapabilityChecker(client, now).run_all()
     report = to_markdown(rows, now)

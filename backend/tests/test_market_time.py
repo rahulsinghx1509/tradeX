@@ -9,10 +9,15 @@ def ist(y, m, d, hh, mm):
     return datetime(y, m, d, hh, mm, tzinfo=mt.IST).astimezone(UTC)
 
 
-def test_hourly_bars_follow_nse_session():
+def test_hourly_bars_follow_the_clock_like_groww():
     bars = mt.bar_starts_for_day(date(2026, 10, 15), "1h")
     times = [mt.to_ist(b).strftime("%H:%M") for b in bars]
-    assert times == ["09:15", "10:15", "11:15", "12:15", "13:15", "14:15", "15:15"]
+    assert times == ["09:15", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
+
+
+def test_first_hourly_bar_ends_at_ten():
+    first = mt.bar_starts_for_day(date(2026, 10, 15), "1h")[0]
+    assert mt.bar_end(first, "1h") == ist(2026, 10, 15, 10, 0)
 
 
 def test_last_hourly_bar_ends_at_close():
@@ -38,7 +43,7 @@ def test_market_open_window():
 
 def test_latest_closed_bar_during_session():
     now = ist(2026, 10, 15, 11, 20)
-    assert mt.latest_expected_closed_bar(now, "1h", NO_HOLIDAYS) == ist(2026, 10, 15, 10, 15)
+    assert mt.latest_expected_closed_bar(now, "1h", NO_HOLIDAYS) == ist(2026, 10, 15, 10, 0)
     # Today's daily candle is not complete until 15:30, so yesterday's is the latest.
     assert mt.latest_expected_closed_bar(now, "1d", NO_HOLIDAYS) == ist(2026, 10, 14, 9, 15)
 
