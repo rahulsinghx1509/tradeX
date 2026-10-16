@@ -9,7 +9,8 @@ dc() { docker compose --env-file .env -f deploy/docker-compose.yml "$@"; }
 script() { dc run --rm --no-deps collector python "scripts/$1" "${@:2}"; }
 
 case "${1:-help}" in
-  start)      dc up -d --build --remove-orphans ;;
+  # Images are built one at a time so a 1 GB server doesn't run out of memory.
+  start)      dc build migrate && dc build dashboard && dc up -d --remove-orphans ;;
   stop)       dc down ;;
   restart)    dc restart "${@:2}" ;;
   status)     dc ps ;;

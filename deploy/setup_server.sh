@@ -13,7 +13,7 @@ step() { printf '\n==> %s\n' "$1"; }
 step "Setting the clock to UTC (TradeX stores UTC and converts to IST itself)"
 sudo timedatectl set-timezone UTC
 
-step "Adding 2 GB of swap so building the dashboard doesn't run out of memory"
+step "Adding 2 GB of swap (extra memory on disk) so a 1 GB server doesn't run out during builds"
 if ! swapon --show | grep -q /swapfile; then
   sudo fallocate -l 2G /swapfile
   sudo chmod 600 /swapfile

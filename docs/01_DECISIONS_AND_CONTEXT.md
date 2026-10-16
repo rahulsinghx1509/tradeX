@@ -98,7 +98,9 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 
 - Development: Claude Code cloud session or owner's personal laptop.
   - Cloud session needs `groww.in` and `api.groww.in` in allowed domains and Groww credentials as secrets (`GROWW_API_KEY`, `GROWW_API_SECRET`). The Groww key can place orders — owner decides whether to store it in the cloud environment.
-- 24/7 running (approved 2026-10-16): **AWS Lightsail Mumbai, $12 / 2 GB plan** (~₹1,345/month incl. GST), static IP included.
+- 24/7 running (approved 2026-10-16): **AWS Lightsail Mumbai**, static IP included. Started on the **$7 / 1 GB plan** (~₹785/month incl. GST)
+  because the new AWS account was blocked from the $12 / 2 GB plan; move up via snapshot if needed.
+  The dashboard is built with webpack (~400 MB) so builds fit next to the running stack, plus 2 GB swap.
   All services, including PostgreSQL and the dashboard, run on that one server with Docker Compose (a managed database
   would cost ~₹1,700/month more). Dashboard is private via Tailscale; public port 80 stays closed.
   The server pulls `main` every 5 minutes, so Claude never needs SSH access. Groww key lives only in the server's `.env`.

@@ -31,7 +31,11 @@ Total time: about 30–45 minutes, once.
 1. Lightsail → **Create instance**.
 2. Region: **Mumbai (ap-south-1)**, any zone.
 3. Platform **Linux/Unix** → **OS Only** → **Ubuntu 24.04 LTS**.
-4. Plan: **$12 / month (2 GB RAM, 2 vCPU, 60 GB SSD)**.
+4. Plan: **$7 / month (1 GB RAM, 2 vCPU, 40 GB SSD)**, about ₹785 a month with GST.
+   TradeX uses about 350 MB when running, and the setup adds swap so updates fit too.
+   New AWS accounts are often blocked from the $12 (2 GB) plan at first
+   ("your account can not create an instance using this Lightsail plan size"). That's fine;
+   see *Moving to a bigger plan later* near the end of this guide.
 5. Name: `tradex-server` → **Create instance**. Wait until it says *Running*.
 
 ### A2. Give it a static IP
@@ -201,6 +205,20 @@ After changing `.env`, run `start` again so the containers pick it up.
   ```bash
   gunzip -c ~/tradex-backups/<file>.sql.gz | docker compose --env-file ~/tradex/.env -f ~/tradex/deploy/docker-compose.yml exec -T db psql -U tradex -d tradex
   ```
+
+## Moving to a bigger plan later
+
+Only needed if the server feels slow or AWS has lifted the plan limit and you want headroom.
+Lightsail can't resize a server in place, so you copy it:
+
+1. `tradex-server` → **Snapshots** → **Create snapshot**.
+2. When it's ready, open the snapshot's menu → **Create new instance**, pick the bigger plan, name it `tradex-server-2`.
+3. **Networking** → `tradex-ip` → detach from the old server and attach to the new one.
+   The address stays the same, so Groww and Tailscale need no changes.
+4. Check `http://tradex` works, then delete the old server and the snapshot so they stop costing money.
+
+If AWS still refuses the bigger plan, open a case with AWS Support asking for a Lightsail
+plan-size limit increase in Mumbai.
 
 ## Rotating a key
 
