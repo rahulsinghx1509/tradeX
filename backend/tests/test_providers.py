@@ -98,6 +98,12 @@ class FakeGroww:
             {"exchange": "NSE", "segment": "FNO", "instrument_type": "CE",
              "underlying_symbol": "NIFTY", "expiry_date": "2099-01-29", "lot_size": 65,
              "groww_symbol": "OPT", "trading_symbol": "OPT"},
+            {"exchange": "NSE", "segment": "FNO", "instrument_type": "FUT",
+             "underlying_symbol": "SBIN", "expiry_date": "2099-01-29", "lot_size": 750,
+             "groww_symbol": "NSE-SBIN-29Jan99-FUT", "trading_symbol": "SBIN26OCTFUT"},
+            {"exchange": "NSE", "segment": "CASH", "instrument_type": "EQ",
+             "underlying_symbol": None, "expiry_date": None, "lot_size": 1,
+             "groww_symbol": "NSE-SBIN", "trading_symbol": "SBIN"},
         ])
 
 
@@ -173,3 +179,22 @@ def test_groww_logs_in_again_after_daily_reset(monkeypatch):
     assert not p._session_expired()
     monkeypatch.setattr("app.providers.groww.last_daily_reset", lambda now: now)
     assert p._session_expired()
+
+
+def test_groww_tracks_stocks_and_skips_unknown_symbols():
+    p = GrowwProvider(Settings(), client=FakeGroww())
+    insts = p.list_instruments(["NIFTY", "SBIN", "NOSUCHSTOCK"], 2)
+    spots = {i.symbol: i for i in insts if i.segment == "CASH"}
+    # NIFTY has no cash row in the fake list, so the known-index fallback applies.
+    assert spots["NIFTY"].instrument_type == "INDEX" and spots["NIFTY"].provider_symbol == "NSE-NIFTY"
+    assert spots["SBIN"].instrument_type == "STOCK" and spots["SBIN"].provider_symbol == "NSE-SBIN"
+    assert "NOSUCHSTOCK" not in {i.symbol for i in insts}
+    sbin_fut = [i for i in insts if i.symbol == "SBIN" and i.instrument_type == "FUTURE"]
+    assert [f.lot_size for f in sbin_fut] == [750]
+
+
+def test_sample_stocks_have_volume_but_no_oi(provider):
+    stock = provider.list_instruments(["SBIN"], 1)[0]
+    assert stock.instrument_type == "STOCK"
+    candles = provider.get_candles(stock, "1d", NOW - timedelta(days=10), NOW)
+    assert candles and all(c.volume is not None and c.open_interest is None for c in candles)

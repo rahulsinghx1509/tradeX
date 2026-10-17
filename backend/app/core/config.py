@@ -36,7 +36,11 @@ class Settings(BaseSettings):
     groww_totp_secret: SecretStr | None = None
 
     # --- What to collect -----------------------------------------------------
-    underlyings: str = "NIFTY,BANKNIFTY"
+    # The 12-instrument pool from docs/01_DECISIONS_AND_CONTEXT.md, with FINNIFTY in place of
+    # TATAMOTORS (demerged in 2025). Symbols missing from Groww's list are skipped with a warning.
+    underlyings: str = (
+        "NIFTY,BANKNIFTY,FINNIFTY,HDFCBANK,ICICIBANK,SBIN,AXISBANK,INFY,TCS,RELIANCE,BHARTIARTL,LT"
+    )
     timeframes: str = "1d,1h"
     # How far back the backfill goes. Groww says FNO/index history starts in 2020.
     backfill_days_1d: int = Field(default=1825, ge=1)

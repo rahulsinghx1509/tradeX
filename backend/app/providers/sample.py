@@ -24,8 +24,11 @@ from app.providers.base import Candle, Capability, InstrumentInfo, MarketDataPro
 ANCHOR = date(2020, 1, 1)
 # Starting levels and lot sizes are illustrative only. Real lot sizes must come
 # from the provider's instrument list (they change about every 6 months).
-_START_LEVEL = {"NIFTY": 12000.0, "BANKNIFTY": 31000.0}
-_SAMPLE_LOT = {"NIFTY": 65, "BANKNIFTY": 30}
+_START_LEVEL = {"NIFTY": 12000.0, "BANKNIFTY": 31000.0, "FINNIFTY": 13000.0}
+_SAMPLE_LOT = {"NIFTY": 65, "BANKNIFTY": 30, "FINNIFTY": 60}
+_SAMPLE_INDICES = frozenset({"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTYNXT50"})
+_SAMPLE_STOCK_LEVEL = 1000.0
+_SAMPLE_STOCK_LOT = 500
 _HOURLY_VOL = 0.0035
 _HOURLY_DRIFT = 0.00003
 
@@ -72,7 +75,8 @@ class SampleProvider(MarketDataProvider):
             hi_rng = np.random.default_rng(_seed("high", symbol))
             lo_rng = np.random.default_rng(_seed("low", symbol))
             returns = ret_rng.normal(_HOURLY_DRIFT, _HOURLY_VOL, size=len(times))
-            closes = _START_LEVEL.get(symbol, 10000.0) * np.exp(np.cumsum(returns))
+            default = 10000.0 if symbol in _SAMPLE_INDICES else _SAMPLE_STOCK_LEVEL
+            closes = _START_LEVEL.get(symbol, default) * np.exp(np.cumsum(returns))
             opens = np.concatenate([[closes[0] / np.exp(returns[0])], closes[:-1]])
             wiggle = np.abs(
                 np.column_stack(
@@ -100,9 +104,10 @@ class SampleProvider(MarketDataProvider):
     def list_instruments(self, underlyings: list[str], futures_expiries: int) -> list[InstrumentInfo]:
         out: list[InstrumentInfo] = []
         for sym in underlyings:
+            kind = "INDEX" if sym in _SAMPLE_INDICES else "STOCK"
             out.append(
                 InstrumentInfo(
-                    symbol=sym, instrument_type="INDEX", exchange="NSE", segment="CASH",
+                    symbol=sym, instrument_type=kind, exchange="NSE", segment="CASH",
                     provider_symbol=f"SAMPLE-NSE-{sym}", trading_symbol=sym,
                 )
             )
@@ -112,7 +117,8 @@ class SampleProvider(MarketDataProvider):
                         symbol=sym, instrument_type="FUTURE", exchange="NSE", segment="FNO",
                         provider_symbol=f"SAMPLE-NSE-{sym}-{exp:%d%b%y}-FUT",
                         trading_symbol=f"{sym}{exp:%y%b}FUT".upper(),
-                        expiry_date=exp, lot_size=_SAMPLE_LOT.get(sym),
+                        expiry_date=exp,
+                        lot_size=_SAMPLE_LOT.get(sym, None if kind == "INDEX" else _SAMPLE_STOCK_LOT),
                     )
                 )
         return out
@@ -145,6 +151,9 @@ class SampleProvider(MarketDataProvider):
                 vol_rng = np.random.default_rng(_seed("vol", instrument.provider_symbol, t.isoformat()))
                 volume = int(vol_rng.integers(50_000, 400_000))
                 oi = int(oi_base * (1 + 0.15 * np.sin(i / 40)))
+            elif instrument.instrument_type == "STOCK":
+                vol_rng = np.random.default_rng(_seed("vol", instrument.provider_symbol, t.isoformat()))
+                volume, oi = int(vol_rng.integers(200_000, 2_000_000)), None  # shares trade; no OI
             else:
                 volume, oi = None, None  # indices have no traded volume or OI
             hourly.append(Candle(t, o, h, low, c, volume, oi))

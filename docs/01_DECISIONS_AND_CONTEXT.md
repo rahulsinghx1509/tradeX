@@ -39,6 +39,7 @@ Notes:
 - TATAMOTORS was demerged in late 2025; confirm current F&O symbol from Groww's instrument list.
 - BANKNIFTY options have **monthly expiries only**.
 - Milestone 1 starts with NIFTY + BANKNIFTY; stocks come in Milestone 2.
+- 2026-10-17: the dashboard tracks all 12 (`UNDERLYINGS` in `.env`), with **FINNIFTY in place of TATAMOTORS** until its post-demerger F&O symbol is confirmed. Symbols missing from Groww's instrument list are skipped with a warning.
 
 ## 3. Roadmap (agreed order)
 

@@ -14,7 +14,7 @@ export interface Freshness {
 export interface Instrument {
   id: number;
   symbol: string;
-  instrument_type: "INDEX" | "FUTURE" | "OPTION";
+  instrument_type: "INDEX" | "STOCK" | "FUTURE" | "OPTION";
   exchange: string;
   segment: string;
   expiry_date: string | null;
