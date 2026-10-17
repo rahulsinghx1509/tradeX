@@ -128,7 +128,7 @@ def ingest_candles(session: Session, provider: MarketDataProvider, instrument: I
 
     candles, c1 = dq.drop_incomplete(raw, timeframe, now)
     candles, c2 = dq.dedupe(candles)
-    problems, c3 = dq.validate_ohlc(candles)
+    problems, c3 = dq.validate_ohlc(candles, spike_check=instrument.instrument_type != "OPTION")
     is_fno = instrument.segment == "FNO"
     expect_volume = is_fno or instrument.instrument_type == "STOCK"
     c4 = dq.check_missing_values(candles, expect_volume=expect_volume, expect_oi=is_fno)

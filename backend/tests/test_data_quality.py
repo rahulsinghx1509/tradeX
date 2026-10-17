@@ -21,6 +21,10 @@ def test_invalid_ohlc_reasons():
     assert dq.ohlc_problem(c(T0, o=0)) == "NON_POSITIVE_PRICE"
     assert dq.ohlc_problem(c(T0, cl=None)) == "MISSING_PRICE"
     assert dq.ohlc_problem(c(T0, v=-1)) == "NEGATIVE_VOLUME"
+    # Bad ticks seen from Groww: a daily high of ~195,000 on a ~1,900 stock.
+    assert dq.ohlc_problem(c(T0, h=195000)) == "PRICE_SPIKE"
+    assert dq.ohlc_problem(c(T0, low=1)) == "PRICE_SPIKE"
+    assert dq.ohlc_problem(c(T0, h=195000), spike_check=False) is None
 
 
 def test_missing_volume_is_not_an_ohlc_error():

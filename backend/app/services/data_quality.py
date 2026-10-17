@@ -21,6 +21,10 @@ from app.providers.base import Candle
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 MAX_EXAMPLES = 10  # keep log rows small
+# A high more than 1.5x the open/close (or a low under 1/1.5 of it) is a bad tick, not a
+# real move: NSE circuit limits stop stocks and indices at 20% in a session. Options can
+# genuinely move this much, so they are not spike-checked.
+MAX_WICK_RATIO = 1.5
 
 
 @dataclass
@@ -30,7 +34,7 @@ class CheckResult:
     details: dict = field(default_factory=dict)
 
 
-def ohlc_problem(c: Candle) -> str | None:
+def ohlc_problem(c: Candle, spike_check: bool = True) -> str | None:
     """Why a candle is invalid, or None if it is fine."""
     prices = (c.open, c.high, c.low, c.close)
     if any(p is None for p in prices):
@@ -39,6 +43,9 @@ def ohlc_problem(c: Candle) -> str | None:
         return "NON_POSITIVE_PRICE"
     if c.high < max(c.open, c.close) or c.low > min(c.open, c.close) or c.high < c.low:
         return "INCONSISTENT_OHLC"
+    if spike_check and (c.high > MAX_WICK_RATIO * max(c.open, c.close)
+                        or c.low * MAX_WICK_RATIO < min(c.open, c.close)):
+        return "PRICE_SPIKE"
     if c.volume is not None and c.volume < 0:
         return "NEGATIVE_VOLUME"
     if c.open_interest is not None and c.open_interest < 0:
@@ -75,8 +82,8 @@ def dedupe(candles: list[Candle]) -> tuple[list[Candle], CheckResult]:
     )
 
 
-def validate_ohlc(candles: list[Candle]) -> tuple[dict[datetime, str], CheckResult]:
-    problems = {c.time: p for c in candles if (p := ohlc_problem(c))}
+def validate_ohlc(candles: list[Candle], spike_check: bool = True) -> tuple[dict[datetime, str], CheckResult]:
+    problems = {c.time: p for c in candles if (p := ohlc_problem(c, spike_check))}
     examples = [{"time": t.isoformat(), "reason": r} for t, r in list(problems.items())[:MAX_EXAMPLES]]
     return problems, CheckResult(
         "invalid_ohlc", FAIL if problems else PASS, {"invalid": len(problems), "examples": examples}
