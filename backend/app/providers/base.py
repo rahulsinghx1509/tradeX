@@ -28,7 +28,7 @@ class ProviderError(RuntimeError):
 @dataclass(frozen=True)
 class InstrumentInfo:
     symbol: str  # underlying, e.g. NIFTY
-    instrument_type: str  # INDEX / FUTURE / OPTION
+    instrument_type: str  # INDEX / STOCK / FUTURE / OPTION
     exchange: str
     segment: str  # CASH / FNO
     provider_symbol: str  # identifier the provider uses for candles
@@ -72,7 +72,7 @@ class MarketDataProvider(ABC):
 
     @abstractmethod
     def list_instruments(self, underlyings: list[str], futures_expiries: int) -> list[InstrumentInfo]:
-        """Index instruments plus the next `futures_expiries` futures contracts per underlying."""
+        """The index or stock itself plus the next `futures_expiries` futures contracts per underlying."""
 
     @abstractmethod
     def get_candles(

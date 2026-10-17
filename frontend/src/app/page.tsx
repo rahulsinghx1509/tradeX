@@ -46,7 +46,7 @@ export default function Dashboard() {
     [current],
   );
 
-  // Default to the index when the underlying changes or the old contract disappears.
+  // Default to the index / stock when the underlying changes or the old contract disappears.
   useEffect(() => {
     if (contracts.length && !contracts.some((c) => c.id === instrumentId)) {
       setInstrumentId(contracts[0].id);
@@ -93,7 +93,7 @@ export default function Dashboard() {
 
         {overview && (
           <>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {overview.underlyings.map((u) => (
                 <OverviewCard key={u.symbol} symbol={u.symbol} index={u.index} futures={u.futures} />
               ))}
@@ -120,7 +120,9 @@ export default function Dashboard() {
                     value={instrumentId ?? ""} onChange={(e) => setInstrumentId(Number(e.target.value))}>
                     {contracts.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.instrument_type === "INDEX" ? `${c.symbol} index` : `Future · expiry ${formatIst(c.expiry_date, false)}`}
+                        {c.instrument_type === "FUTURE"
+                          ? `Future · expiry ${formatIst(c.expiry_date, false)}`
+                          : `${c.symbol} ${c.instrument_type === "STOCK" ? "stock" : "index"}`}
                       </option>
                     ))}
                   </select>
@@ -143,7 +145,9 @@ export default function Dashboard() {
               )}
               <p className="text-xs text-slate-500">
                 Times in IST. Showing the latest {candles?.count ?? 0} completed candles
-                {selected?.instrument_type === "FUTURE" ? "; purple line = open interest" : "; indices have no volume or OI"}.
+                {selected?.instrument_type === "FUTURE"
+                  ? "; purple line = open interest"
+                  : selected?.instrument_type === "STOCK" ? "; stocks have no OI" : "; indices have no volume or OI"}.
               </p>
             </section>
 

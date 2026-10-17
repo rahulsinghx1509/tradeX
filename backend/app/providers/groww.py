@@ -16,13 +16,15 @@ so the first one of the day is pinned to the 09:15 open.
 
 Still to verify (the verify script checks each one):
 - Candle timestamps without a timezone are Indian time (IST).
-- The instrument CSV marks futures with instrument_type "FUT".
+- The instrument CSV marks futures with instrument_type "FUT" and indices "IDX".
+- Stock candles use groww_symbol "NSE-<SYMBOL>" in the CASH segment.
 
 This adapter only READS data. It never calls any order, modify or cancel method.
 """
 
 from __future__ import annotations
 
+import logging
 import time as _time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -38,6 +40,8 @@ from app.providers.base import (
     Snapshot,
 )
 
+log = logging.getLogger(__name__)
+
 # Values from the SDK "Annexures" page.
 INTERVALS = {"1h": "1hour", "1d": "1day"}
 # Max time range per candle request (from the backtesting docs): 1h / 1d -> 180 days.
@@ -45,6 +49,8 @@ MAX_WINDOW = {"1h": timedelta(days=180), "1d": timedelta(days=180)}
 MIN_SECONDS_BETWEEN_CALLS = 0.15  # stays under the documented 10 requests/second
 # Waits before retrying a call Groww refused with "rate limit" (seconds).
 RATE_LIMIT_BACKOFF = (2, 4, 8, 16)
+# NSE indices with F&O. Anything else in UNDERLYINGS is treated as a stock.
+KNOWN_INDICES = frozenset({"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTYNXT50"})
 # Groww resets every login session daily at 06:00 IST, so log in again after that.
 DAILY_RESET_HOUR_IST = 6
 
@@ -131,6 +137,28 @@ def parse_quote(payload: dict, received_at: datetime) -> Snapshot:
     )
 
 
+def spot_instrument(sym: str, cash: Any, has_futures: bool) -> InstrumentInfo | None:
+    """The index or stock itself (cash segment) for one underlying, or None if Groww has no such symbol.
+
+    Uses the NSE cash row from the instrument list when there is one. Otherwise falls back to
+    "NSE-<symbol>" (confirmed for NIFTY and BANKNIFTY by Milestone 0) for known indices, and
+    for stocks that have futures. ASSUMPTION (NOT_VERIFIED): the list marks indices "IDX".
+    """
+    rows = cash[cash["trading_symbol"] == sym] if len(cash) else cash
+    if len(rows):
+        row = rows.iloc[0]
+        kind = "INDEX" if str(row.get("instrument_type")) == "IDX" or sym in KNOWN_INDICES else "STOCK"
+        provider_symbol = str(row.get("groww_symbol") or f"NSE-{sym}")
+    elif sym in KNOWN_INDICES:
+        kind, provider_symbol = "INDEX", f"NSE-{sym}"
+    elif has_futures:
+        kind, provider_symbol = "STOCK", f"NSE-{sym}"
+    else:
+        return None
+    return InstrumentInfo(symbol=sym, instrument_type=kind, exchange="NSE", segment="CASH",
+                          provider_symbol=provider_symbol, trading_symbol=sym)
+
+
 class GrowwProvider(MarketDataProvider):
     name = "groww"
     is_sample = False
@@ -214,13 +242,6 @@ class GrowwProvider(MarketDataProvider):
     def list_instruments(self, underlyings: list[str], futures_expiries: int) -> list[InstrumentInfo]:
         import pandas as pd
 
-        out = [
-            InstrumentInfo(
-                symbol=sym, instrument_type="INDEX", exchange="NSE", segment="CASH",
-                provider_symbol=f"NSE-{sym}", trading_symbol=sym,
-            )
-            for sym in underlyings
-        ]
         df = self._call("get_all_instruments")
         if df is None or len(df) == 0:
             raise ProviderError("Groww instrument list is empty")
@@ -234,8 +255,18 @@ class GrowwProvider(MarketDataProvider):
             & (df["underlying_symbol"].isin(underlyings))
             & (df["_expiry"] >= today)
         ].sort_values("_expiry")
+        cash = df[(df["exchange"] == "NSE") & (df["segment"] == "CASH")]
+
+        out = []
         for sym in underlyings:
-            for _, row in futs[futs["underlying_symbol"] == sym].head(futures_expiries).iterrows():
+            sym_futs = futs[futs["underlying_symbol"] == sym]
+            spot = spot_instrument(sym, cash, has_futures=len(sym_futs) > 0)
+            if spot is None:
+                # Unknown or renamed symbol: skip it rather than fail every 5 minutes.
+                log.warning("%s is not in Groww's NSE instrument list; not tracking it", sym)
+                continue
+            out.append(spot)
+            for _, row in sym_futs.head(futures_expiries).iterrows():
                 out.append(
                     InstrumentInfo(
                         symbol=sym, instrument_type="FUTURE", exchange="NSE", segment="FNO",

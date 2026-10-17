@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api")
 @router.get("/instruments")
 def list_instruments(
     symbol: str | None = Query(None, max_length=32, description="e.g. NIFTY"),
-    instrument_type: str | None = Query(None, pattern="^(INDEX|FUTURE|OPTION)$"),
+    instrument_type: str | None = Query(None, pattern="^(INDEX|STOCK|FUTURE|OPTION)$"),
     active_only: bool = True,
     provider: str | None = Query(None, max_length=20, description="default: DATA_PROVIDER in .env"),
     session: Session = Depends(get_session),

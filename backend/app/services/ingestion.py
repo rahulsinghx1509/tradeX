@@ -75,7 +75,7 @@ def _log_checks(session: Session, run: IngestionRun, instrument_id: int | None,
 # --------------------------------------------------------------------------- instruments
 def sync_instruments(session: Session, provider: MarketDataProvider, underlyings: list[str],
                      futures_expiries: int) -> IngestResult:
-    """Refresh the instrument list (indices + upcoming futures) from the provider."""
+    """Refresh the instrument list (indices / stocks + upcoming futures) from the provider."""
     run = _start_run(session, provider, "instruments")
     try:
         infos = provider.list_instruments(underlyings, futures_expiries)
@@ -130,7 +130,8 @@ def ingest_candles(session: Session, provider: MarketDataProvider, instrument: I
     candles, c2 = dq.dedupe(candles)
     problems, c3 = dq.validate_ohlc(candles)
     is_fno = instrument.segment == "FNO"
-    c4 = dq.check_missing_values(candles, expect_volume=is_fno, expect_oi=is_fno)
+    expect_volume = is_fno or instrument.instrument_type == "STOCK"
+    c4 = dq.check_missing_values(candles, expect_volume=expect_volume, expect_oi=is_fno)
     c5 = dq.check_gaps(candles, timeframe)
     checks = [dq.CheckResult("source_availability", dq.PASS, {"received": len(raw)}),
               c1, c2, c3, c4, c5]

@@ -48,7 +48,7 @@ class Instrument(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     symbol: Mapped[str] = mapped_column(String(32))  # underlying, e.g. NIFTY
-    instrument_type: Mapped[str] = mapped_column(String(10))  # INDEX / FUTURE / OPTION
+    instrument_type: Mapped[str] = mapped_column(String(10))  # INDEX / STOCK / FUTURE / OPTION
     exchange: Mapped[str] = mapped_column(String(10))
     segment: Mapped[str] = mapped_column(String(10))  # CASH / FNO
     expiry_date: Mapped[date | None] = mapped_column(Date)

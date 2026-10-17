@@ -87,7 +87,8 @@ def overview(session: Session = Depends(get_session)) -> dict:
             select(Instrument).where(Instrument.symbol == sym, Instrument.is_active,
                                      Instrument.provider == settings.data_provider.lower())
             .order_by(Instrument.instrument_type.desc(), Instrument.expiry_date)))
-        index = next((i for i in insts if i.instrument_type == "INDEX"), None)
+        # "index" = the underlying itself: the index, or the stock's cash price.
+        index = next((i for i in insts if i.instrument_type in ("INDEX", "STOCK")), None)
         futures = [i for i in insts if i.instrument_type == "FUTURE"]
         underlyings.append({
             "symbol": sym,
