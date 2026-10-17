@@ -91,3 +91,32 @@ def test_no_incomplete_candle_is_stored(session, provider):
                    during_session, during_session)
     latest = session.scalar(select(func.max(MarketCandle.candle_time)))
     assert latest.date() < during_session.date()
+
+
+class NoOpenDailyProvider(SampleProvider):
+    """Groww-like: stock daily candles arrive without an open price."""
+
+    def get_candles(self, instrument, timeframe, start, end):
+        out = super().get_candles(instrument, timeframe, start, end)
+        if timeframe == "1d":
+            out = [Candle(c.time, None, c.high, c.low, c.close, c.volume) for c in out]
+        return out
+
+
+def test_daily_missing_open_stays_valid_and_takes_open_from_1h(session, provider):
+    sync_instruments(session, provider, ["NIFTY"], 1)
+    inst = session.scalar(select(Instrument).where(Instrument.instrument_type == "INDEX"))
+    p = NoOpenDailyProvider(today=provider._today)
+    start = NOW - timedelta(days=10)
+    ingest_candles(session, p, inst, "1h", NOW - timedelta(days=3), NOW, NOW)  # only recent 1h
+    res = ingest_candles(session, p, inst, "1d", start, NOW, NOW)
+    daily = session.scalars(select(MarketCandle).where(MarketCandle.timeframe == "1d")
+                            .order_by(MarketCandle.candle_time)).all()
+    assert daily and all(d.quality_status == "VALID" for d in daily)
+    filled = [d for d in daily if d.open is not None]
+    assert filled and len(filled) < len(daily)  # older days have no 1h data: open stays None
+    first_1h = session.scalar(select(MarketCandle).where(
+        MarketCandle.timeframe == "1h", MarketCandle.candle_time == filled[-1].candle_time))
+    assert filled[-1].open == first_1h.open
+    check = next(c for c in res.checks if c.check_name == "missing_open")
+    assert check.status == "WARN" and check.details["open_filled_from_1h"] == len(filled)

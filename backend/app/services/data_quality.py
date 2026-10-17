@@ -35,22 +35,33 @@ class CheckResult:
 
 
 def ohlc_problem(c: Candle, spike_check: bool = True) -> str | None:
-    """Why a candle is invalid, or None if it is fine."""
-    prices = (c.open, c.high, c.low, c.close)
-    if any(p is None for p in prices):
+    """Why a candle is invalid, or None if it is fine.
+
+    A missing OPEN alone does not make a candle invalid: Groww often sends stock daily candles
+    without one, and high / low / close are still real. The open stays missing (never guessed);
+    check_missing_open reports it.
+    """
+    if any(p is None for p in (c.high, c.low, c.close)):
         return "MISSING_PRICE"
-    if any(p <= 0 for p in prices):
+    body = [p for p in (c.open, c.close) if p is not None]
+    if any(p <= 0 for p in (*body, c.high, c.low)):
         return "NON_POSITIVE_PRICE"
-    if c.high < max(c.open, c.close) or c.low > min(c.open, c.close) or c.high < c.low:
+    if c.high < max(body) or c.low > min(body) or c.high < c.low:
         return "INCONSISTENT_OHLC"
-    if spike_check and (c.high > MAX_WICK_RATIO * max(c.open, c.close)
-                        or c.low * MAX_WICK_RATIO < min(c.open, c.close)):
+    if spike_check and (c.high > MAX_WICK_RATIO * max(body) or c.low * MAX_WICK_RATIO < min(body)):
         return "PRICE_SPIKE"
     if c.volume is not None and c.volume < 0:
         return "NEGATIVE_VOLUME"
     if c.open_interest is not None and c.open_interest < 0:
         return "NEGATIVE_OI"
     return None
+
+
+def check_missing_open(candles: list[Candle], filled_from_1h: int = 0) -> CheckResult:
+    """Candles stored without an open price (WARN). `filled_from_1h` were completed from 1h data."""
+    missing = sum(1 for c in candles if c.open is None)
+    return CheckResult("missing_open", WARN if missing else PASS,
+                       {"missing_open": missing, "open_filled_from_1h": filled_from_1h})
 
 
 def drop_incomplete(candles: list[Candle], timeframe: str, now: datetime) -> tuple[list[Candle], CheckResult]:
@@ -83,10 +94,15 @@ def dedupe(candles: list[Candle]) -> tuple[list[Candle], CheckResult]:
 
 
 def validate_ohlc(candles: list[Candle], spike_check: bool = True) -> tuple[dict[datetime, str], CheckResult]:
+    """Invalid candles are set aside. FAIL only if the newest candle is one of them (the latest
+    data is unusable); older invalid candles are a WARN, since signals never use them."""
     problems = {c.time: p for c in candles if (p := ohlc_problem(c, spike_check))}
     examples = [{"time": t.isoformat(), "reason": r} for t, r in list(problems.items())[:MAX_EXAMPLES]]
+    newest_bad = bool(candles) and max(c.time for c in candles) in problems
+    status = FAIL if newest_bad else (WARN if problems else PASS)
     return problems, CheckResult(
-        "invalid_ohlc", FAIL if problems else PASS, {"invalid": len(problems), "examples": examples}
+        "invalid_ohlc", status, {"invalid": len(problems), "newest_invalid": newest_bad,
+                                 "examples": examples}
     )
 
 

@@ -39,7 +39,10 @@ def main() -> int:
         print(f"Instruments: {r.status} ({r.rows_written} rows){' - ' + r.error if r.error else ''}")
         if r.status != "SUCCESS":
             return 1
-        for tf in [t.strip() for t in args.timeframes.split(",") if t.strip()]:
+        # 1h first: daily candles missing an open take it from the day's first 1h candle.
+        timeframes = sorted({t.strip() for t in args.timeframes.split(",") if t.strip()},
+                            key=lambda t: t != "1h")
+        for tf in timeframes:
             days = args.days_1d if tf == "1d" else args.days_1h
             for res in backfill(session, provider, tf, days, symbols):
                 warn = [c.check_name for c in res.checks if c.status != "PASS"]
