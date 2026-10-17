@@ -60,8 +60,9 @@ def run_cycle(session: Session, provider: MarketDataProvider, notifier, state: C
 
     after_close = to_ist(now).time() >= SESSION_CLOSE
     if is_trading_day(to_ist(now).date()) and after_close and state.eod_done_for != today:
-        results = refresh_recent(session, provider, "1d", now) + \
-            refresh_recent(session, provider, "1h", now)
+        # 1h first: daily candles missing an open take it from the day's first 1h candle.
+        results = refresh_recent(session, provider, "1h", now) + \
+            refresh_recent(session, provider, "1d", now)
         bad = sum(r.status != "SUCCESS" for r in results)
         notifier.send(f"TradeX end of day {today}: {len(results) - bad} loads ok, {bad} failed.")
         state.eod_done_for = today

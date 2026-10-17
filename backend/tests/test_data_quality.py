@@ -27,6 +27,13 @@ def test_invalid_ohlc_reasons():
     assert dq.ohlc_problem(c(T0, h=195000), spike_check=False) is None
 
 
+def test_missing_open_alone_is_not_invalid():
+    # Groww sends many stock daily candles without an open; high/low/close are still usable.
+    assert dq.ohlc_problem(c(T0, o=None)) is None
+    assert dq.ohlc_problem(c(T0, o=None, h=100.0)) == "INCONSISTENT_OHLC"  # high below close
+    assert dq.check_missing_open([c(T0, o=None), c(T0)]).details["missing_open"] == 1
+
+
 def test_missing_volume_is_not_an_ohlc_error():
     # Missing stays missing: None volume is allowed and is never turned into 0.
     assert dq.ohlc_problem(c(T0, v=None)) is None
@@ -61,3 +68,11 @@ def test_no_gaps_passes():
 def test_missing_oi_for_futures_warns():
     res = dq.check_missing_values([c(T0, oi=None)], expect_volume=True, expect_oi=True)
     assert res.status == dq.WARN and res.details["missing_open_interest"] == 1
+
+
+def test_old_invalid_candle_warns_but_newest_invalid_fails():
+    t1 = T0 + timedelta(days=1)
+    _, res = dq.validate_ohlc([c(T0, h=99.5), c(t1)])
+    assert res.status == "WARN"
+    _, res = dq.validate_ohlc([c(T0), c(t1, h=99.5)])
+    assert res.status == "FAIL"

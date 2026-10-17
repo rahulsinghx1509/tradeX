@@ -8,7 +8,7 @@ In SQL terms this is:  INSERT ... ON CONFLICT (instrument_id, timeframe, candle_
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -16,9 +16,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from app.core.market_time import latest_expected_closed_bar, to_ist, utc_now
+from app.core.market_time import from_db, latest_expected_closed_bar, to_ist, utc_now
 from app.db.models import DataQualityLog, IngestionRun, Instrument, MarketCandle, MarketSnapshot
-from app.providers.base import InstrumentInfo, MarketDataProvider, ProviderError
+from app.providers.base import Candle, InstrumentInfo, MarketDataProvider, ProviderError
 from app.services import data_quality as dq
 
 log = logging.getLogger(__name__)
@@ -128,13 +128,15 @@ def ingest_candles(session: Session, provider: MarketDataProvider, instrument: I
 
     candles, c1 = dq.drop_incomplete(raw, timeframe, now)
     candles, c2 = dq.dedupe(candles)
+    candles, filled = _fill_daily_open(session, instrument, timeframe, candles)
     problems, c3 = dq.validate_ohlc(candles, spike_check=instrument.instrument_type != "OPTION")
     is_fno = instrument.segment == "FNO"
     expect_volume = is_fno or instrument.instrument_type == "STOCK"
     c4 = dq.check_missing_values(candles, expect_volume=expect_volume, expect_oi=is_fno)
     c5 = dq.check_gaps(candles, timeframe)
+    c6 = dq.check_missing_open(candles, filled)
     checks = [dq.CheckResult("source_availability", dq.PASS, {"received": len(raw)}),
-              c1, c2, c3, c4, c5]
+              c1, c2, c3, c4, c5, c6]
 
     received_at = utc_now()
     rows = [
@@ -162,6 +164,27 @@ def ingest_candles(session: Session, provider: MarketDataProvider, instrument: I
     status = "SUCCESS"
     _finish(session, run, status)
     return IngestResult(run.id, status, len(raw), len(rows), checks)
+
+
+def _fill_daily_open(session: Session, instrument: Instrument, timeframe: str,
+                     candles: list[Candle]) -> tuple[list[Candle], int]:
+    """Complete a daily candle's missing open from the stored first 1h candle of that day.
+
+    Both are stamped 09:15 IST and come from the same provider, so this copies a real price;
+    nothing is estimated. Days without a valid 1h candle keep open = None.
+    """
+    missing = [c.time for c in candles if c.open is None]
+    if timeframe != "1d" or not missing:
+        return candles, 0
+    rows = session.execute(
+        select(MarketCandle.candle_time, MarketCandle.open)
+        .where(MarketCandle.instrument_id == instrument.id, MarketCandle.timeframe == "1h",
+               MarketCandle.quality_status == "VALID", MarketCandle.open.is_not(None),
+               MarketCandle.candle_time >= min(missing), MarketCandle.candle_time <= max(missing)))
+    opens = {from_db(t): float(o) for t, o in rows}
+    out = [replace(c, open=opens[c.time]) if c.open is None and c.time in opens else c
+           for c in candles]
+    return out, sum(1 for c in candles if c.open is None and c.time in opens)
 
 
 def backfill(session: Session, provider: MarketDataProvider, timeframe: str, days: int,
