@@ -25,6 +25,7 @@ MAX_EXAMPLES = 10  # keep log rows small
 # real move: NSE circuit limits stop stocks and indices at 20% in a session. Options can
 # genuinely move this much, so they are not spike-checked.
 MAX_WICK_RATIO = 1.5
+VIX_SYMBOL = "INDIAVIX"  # a volatility index: a 50% intraday jump is real, not a bad tick
 # Problems older than this (counted back from the newest candle in the batch) are still logged
 # with their counts and examples, but they no longer turn the check to WARN: signals only use
 # recent data, and a single bad candle from years ago would otherwise keep every badge yellow.
