@@ -43,8 +43,10 @@ checks the free ones (report in `reports/data_sources.md`).
 
 ## 4. Build order (free items only)
 
-1. Run `tradex.sh sources` on the server (this PR). Decides everything below.
-2. If the bhavcopy downloads: load F&O bhavcopy history → compute IV, PCR, max pain, strike OI history →
+1. ✅ `tradex.sh sources` run on the server 2026-10-18: NSE archives download (both F&O file formats,
+   participant OI/volume, ban list back to 2010, MWPL back to 2015). FRED timed out (retry later).
+2. ✅ F&O file loader (`tradex.sh fo-history` for 2020→today; the collector loads each new day from
+   19:00 IST) into table `fo_daily`. Next: compute IV, PCR, max pain and strike OI history from it and
    test the option-chain metrics now instead of waiting 6–12 months.
 3. Participant OI (FII/DII positioning) and the ban list + MWPL as a daily collector step.
 4. FRED global series (daily, end of day).

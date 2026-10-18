@@ -27,6 +27,7 @@ case "${1:-help}" in
   vix-study)  script vix_study.py "${@:2}" && echo "Report: reports/vix_study.md" ;;
   screen)     script feature_screen.py "${@:2}" && echo "Report: reports/feature_screen.md" ;;
   vix-filter-final) script feature_screen.py --final "${@:2}" && echo "Report: reports/vix_filter_final.md" ;;
+  fo-history) script load_fo_history.py "${@:2}" ;;
   sources)    script check_data_sources.py "${@:2}" && echo "Report: reports/data_sources.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
@@ -55,6 +56,7 @@ Usage: deploy/tradex.sh <command>
   vix-study    India VIX vs NIFTY realised volatility, development years only (reports/vix_study.md)
   screen       one-shot screen of all 26 metrics with history, development years only (reports/feature_screen.md)
   vix-filter-final one-time final test of the VIX-jump volatility warning on held-back data (reports/vix_filter_final.md)
+  fo-history   load NSE's free daily F&O files since 2020 (options near the money, all futures; 1-2 hours)
   sources      which free NSE/FRED data files download from here, how far back (reports/data_sources.md)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)
   final        one-time final test of variant C on held-back years (reports/final_test.md)
