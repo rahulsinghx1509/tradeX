@@ -116,3 +116,11 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - The four direction readings D1–D4 from the strategy spec (§5) are shown as UP / DOWN / NEUTRAL / MISSING.
   They are information only. No LONG/SHORT signal is produced until the rules are backtested.
 - Code: `backend/app/services/indicators.py`, `backend/app/services/metrics.py`; served in `/api/market/overview` → `metrics`.
+
+## 10. Data-quality badge rules (2026-10-18)
+
+- The badge answers "can I trust the recent data?". FAIL = the newest candle is invalid or the source failed.
+  WARN = a problem in the last 30 days of the batch (`RECENT_DAYS`). Older problems are still logged with counts
+  and examples in `data_quality_log`, but give PASS.
+- Exact duplicate candles (where two 180-day request windows overlap) are merged and counted, PASS.
+  Conflicting duplicates stay FAIL.
