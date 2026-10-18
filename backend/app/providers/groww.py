@@ -297,6 +297,18 @@ class GrowwProvider(MarketDataProvider):
                                       expiry_date=date.fromisoformat(e))
         return None
 
+    def upcoming_expiries(self, underlying: str, today: date, count: int) -> list[date]:
+        """The next `count` option expiries (today included), from get_expiries."""
+        exp = (self._call("get_expiries", exchange="NSE", underlying_symbol=underlying)
+               or {}).get("expiries") or []
+        days = sorted({date.fromisoformat(str(e)[:10]) for e in exp})
+        return [d for d in days if d >= today][:count]
+
+    def option_chain(self, underlying: str, expiry: date) -> dict:
+        """The raw get_option_chain response for one expiry (field meanings NOT_VERIFIED)."""
+        return self._call("get_option_chain", exchange="NSE", underlying=underlying,
+                          expiry_date=expiry.isoformat()) or {}
+
     def get_candles(
         self, instrument: InstrumentInfo, timeframe: str, start: datetime, end: datetime
     ) -> list[Candle]:

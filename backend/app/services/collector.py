@@ -2,7 +2,8 @@
 
 During market hours (09:15-15:30 IST, Mon-Fri) it wakes up every few minutes and:
   1. stores a quote snapshot for each tracked instrument,
-  2. tops up the latest 1-hour candles.
+  2. tops up the latest 1-hour candles,
+  3. once a day from 15:15 IST, stores the option chains (see services/option_chain.py).
 After the close it loads the day's daily candle once, and sends a heartbeat
 message so you know it is alive. Outside market hours it sleeps.
 
@@ -23,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.core.market_time import SESSION_CLOSE, is_market_open, is_trading_day, to_ist
 from app.db.models import Instrument
 from app.providers.base import MarketDataProvider
+from app.services import option_chain
 from app.services.ingestion import ingest_snapshot, refresh_recent
 
 log = logging.getLogger(__name__)
@@ -33,6 +35,7 @@ class CollectorState:
     """Remembers what already happened today, so end-of-day work runs once."""
 
     eod_done_for: str | None = None
+    chain_done_for: str | None = None
     open_heartbeat_for: str | None = None
     failures: list[str] = field(default_factory=list)
 
@@ -56,6 +59,15 @@ def run_cycle(session: Session, provider: MarketDataProvider, notifier, state: C
             state.failures.extend(failed)
             notifier.send("TradeX data problem: " + ", ".join(failed[:5]) +
                           ". Signals would be NO TRADE until data recovers.")
+        if (state.chain_done_for != today and option_chain.supports_chains(provider)
+                and to_ist(now).time() >= option_chain.CHAIN_TIME_IST):
+            res = option_chain.snapshot(session, provider,
+                                        option_chain.underlyings(session, provider), now)
+            bad = [f"{r.symbol} {r.expiry or ''}".strip() for r in res if r.status != "SUCCESS"]
+            if bad:
+                notifier.send("TradeX option chains not stored: " + ", ".join(bad[:5]))
+            state.chain_done_for = today
+            return "intraday+chains"
         return "intraday"
 
     after_close = to_ist(now).time() >= SESSION_CLOSE
