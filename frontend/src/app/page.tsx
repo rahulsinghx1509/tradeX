@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Pill, SampleBanner, StatusBadge } from "@/components/Badges";
 import OverviewCard from "@/components/OverviewCard";
-import { api, formatIst, type CandleResponse, type Overview, type QualityCheck } from "@/lib/api";
+import { api, formatIst, type CandleResponse, type Overview, type QualityCheck, type VixWarning } from "@/lib/api";
 
 // The chart touches `window`, so it only renders in the browser.
 const CandleChart = dynamic(() => import("@/components/CandleChart"), { ssr: false });
@@ -15,6 +15,30 @@ const TIMEFRAMES = [
   { value: "1h", label: "1 hour" },
 ];
 const REFRESH_MS = 60_000;
+
+// VJ-1.0: the only rule that passed a held-back test. A volatility warning, never a buy/sell signal.
+function VixWarningBanner({ w }: { w: VixWarning }) {
+  const tone =
+    w.status === "WARNING"
+      ? "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100"
+      : w.status === "NO_DATA"
+        ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+        : "border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300";
+  const title =
+    w.status === "WARNING" ? "Volatility warning: option selling NO TRADE"
+      : w.status === "NO_DATA" ? "Volatility warning unavailable: option selling NO TRADE"
+        : "Volatility warning: clear";
+  return (
+    <section className={`rounded-lg border p-4 text-sm ${tone}`}>
+      <p className="font-semibold">{title}</p>
+      <p>{w.message}</p>
+      <p className="mt-1 text-xs opacity-75">
+        Rule {w.version}{w.as_of ? ` · India VIX close of ${w.as_of}` : ""}
+        {w.vix !== null ? ` · VIX ${w.vix.toFixed(2)}` : ""}
+      </p>
+    </section>
+  );
+}
 
 export default function Dashboard() {
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -93,6 +117,7 @@ export default function Dashboard() {
 
         {overview && (
           <>
+            {overview.vix_warning && <VixWarningBanner w={overview.vix_warning} />}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {overview.underlyings.map((u) => (
                 <OverviewCard key={u.symbol} symbol={u.symbol} index={u.index} futures={u.futures} metrics={u.metrics ?? null} hourly={u.hourly ?? null} />

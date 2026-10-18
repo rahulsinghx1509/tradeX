@@ -11,6 +11,7 @@ from app.db.models import DataQualityLog, IngestionRun, Instrument, MarketCandle
 from app.db.session import get_session
 from app.providers.factory import get_provider
 from app.services import metrics as core_metrics
+from app.services import vix_warning
 from app.services.freshness import candle_freshness
 
 router = APIRouter(prefix="/api")
@@ -118,6 +119,8 @@ def overview(session: Session = Depends(get_session)) -> dict:
         "contains_sample_data": any_sample,
         "metrics_version": core_metrics.METRICS_VERSION,
         "hourly_version": core_metrics.HOURLY_VERSION,
+        # VJ-1.0: the only tested rule. A volatility warning (option selling NO TRADE), not a signal.
+        "vix_warning": vix_warning.current(session, settings.data_provider.lower(), now).to_dict(),
         "signal": {"status": "NOT_BUILT",
                    "message": "Trade signals are not built yet (rule engine comes after "
                               "core metrics and backtesting)."},
