@@ -2,11 +2,14 @@
 
 Read-only: it only reads candles from the database. Writes
 reports/signal_study.md (the summary) and reports/signal_study_episodes.csv (every signal).
+With --variants it instead compares long-only variants on the development period and writes
+reports/long_variants.md and reports/long_variants_trades.csv.
 
 Usage (from the repository root):
     python scripts/signal_study.py
     python scripts/signal_study.py --symbols NIFTY,BANKNIFTY
-On the server: deploy/tradex.sh study
+    python scripts/signal_study.py --variants
+On the server: deploy/tradex.sh study  (or: deploy/tradex.sh variants)
 """
 
 import argparse
@@ -20,6 +23,7 @@ from sqlalchemy import select
 from app.core.config import REPO_ROOT, get_settings
 from app.db.models import Instrument
 from app.db.session import get_sessionmaker
+from app.services import long_variants
 from app.services import signal_study as study
 from app.services.metrics import daily_frame
 
@@ -28,6 +32,7 @@ def main() -> int:
     s = get_settings()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--symbols", default=",".join(s.underlying_list))
+    p.add_argument("--variants", action="store_true", help="compare long-only variants instead")
     args = p.parse_args()
     symbols = [x.strip().upper() for x in args.symbols.split(",") if x.strip()]
 
@@ -44,16 +49,24 @@ def main() -> int:
             frames[sym] = daily_frame(session, inst.id)
             print(f"  {sym}: {len(frames[sym])} daily candles")
 
-    episodes, baseline, info = study.run(frames)
-    report = study.to_markdown(episodes, baseline, info, datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"))
+    generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    if args.variants:
+        trades, info = long_variants.run(frames)
+        report = long_variants.to_markdown(trades, info, generated)
+        name, table = "long_variants", trades
+    else:
+        episodes, baseline, info = study.run(frames)
+        report = study.to_markdown(episodes, baseline, info, generated)
+        name, table = "signal_study", episodes
     if s.data_provider.lower() == "sample":
         report = "**SAMPLE DATA: synthetic prices, results mean nothing.**\n\n" + report
     out = Path(REPO_ROOT) / "reports"
     out.mkdir(exist_ok=True)
-    (out / "signal_study.md").write_text(report, encoding="utf-8")
-    episodes.to_csv(out / "signal_study_episodes.csv", index=False)
+    csv = "long_variants_trades.csv" if args.variants else "signal_study_episodes.csv"
+    (out / f"{name}.md").write_text(report, encoding="utf-8")
+    table.to_csv(out / csv, index=False)
     print("\n" + report)
-    print(f"\nSaved {out / 'signal_study.md'} and {out / 'signal_study_episodes.csv'}")
+    print(f"\nSaved {out / (name + '.md')} and {out / csv}")
     return 0
 
 

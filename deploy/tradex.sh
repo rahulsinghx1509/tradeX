@@ -18,6 +18,7 @@ case "${1:-help}" in
   verify)     script verify_provider_capabilities.py && echo "Report: reports/provider_capability_report.md" ;;
   backfill)   script backfill_candles.py "${@:2}" ;;
   study)      script signal_study.py "${@:2}" && echo "Report: reports/signal_study.md" ;;
+  variants)   script signal_study.py --variants "${@:2}" && echo "Report: reports/long_variants.md" ;;
   chat-id)    script telegram_chat_id.py ;;
   test-alert) script send_test_alert.py ;;
   backup)     deploy/backup.sh ;;
@@ -34,6 +35,7 @@ Usage: deploy/tradex.sh <command>
   verify       Milestone 0: check what the Groww API really provides
   backfill     load historical candles
   study        backtest the four core readings (writes reports/signal_study.md)
+  variants     compare long-only variants, development years only (reports/long_variants.md)
   chat-id      print your Telegram chat ID
   test-alert   send a test Telegram message
   backup       back up the database now
