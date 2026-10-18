@@ -170,3 +170,8 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
     long entries on the hourly chart inside the daily trend beats entering on the daily trend
     alone. Needs hourly history first: `deploy/tradex.sh backfill --timeframes 1h --days-1h 2400`.
 - Live option prices and bid/ask at entry are not built; they come after a rule passes its test.
+- MTF-1.0 development result (2021-10 to 2025-03): hourly timing adds little. A (daily trend only)
+  +0.09R over 1212 trades; only D (hourly breakout) beat A in both halves, +0.14R, PF 1.30, edge
+  +0.05R (within noise). B, C, E failed a half. Final test of D (`deploy/tradex.sh hourly-final`),
+  bar fixed before any validation result: ≥100 trades, ≥+0.10R, PF ≥1.2, beats A on the same
+  period, no instrument >50% of total R. Run once; if it fails, this rule family stops.
