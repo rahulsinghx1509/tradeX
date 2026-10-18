@@ -26,6 +26,7 @@ case "${1:-help}" in
   hourly-final) script hourly_study.py --final "${@:2}" && echo "Report: reports/hourly_final.md" ;;
   vix-study)  script vix_study.py "${@:2}" && echo "Report: reports/vix_study.md" ;;
   screen)     script feature_screen.py "${@:2}" && echo "Report: reports/feature_screen.md" ;;
+  vix-filter-final) script feature_screen.py --final "${@:2}" && echo "Report: reports/vix_filter_final.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
@@ -52,6 +53,7 @@ Usage: deploy/tradex.sh <command>
   hourly-final one-time final test of hourly breakout D on held-back data (reports/hourly_final.md)
   vix-study    India VIX vs NIFTY realised volatility, development years only (reports/vix_study.md)
   screen       one-shot screen of all 26 metrics with history, development years only (reports/feature_screen.md)
+  vix-filter-final one-time final test of the VIX-jump volatility warning on held-back data (reports/vix_filter_final.md)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)
   final        one-time final test of variant C on held-back years (reports/final_test.md)
   chat-id      print your Telegram chat ID

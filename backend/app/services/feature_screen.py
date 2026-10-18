@@ -421,3 +421,81 @@ def to_markdown(dev: pd.DataFrame, res: pd.DataFrame, coverage: dict, generated:
               "- Mispricing uses carry (annualised basis) without a risk-free rate series; a "
               "near-constant rate shifts every day equally, so the ranking is unaffected.", ""]
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- final test
+# The one FS-1.1 survivor: India VIX rising over 5 days -> NIFTY's next month more volatile than
+# its HV20. Intended use: a NO TRADE filter for option selling, never a buy/sell signal.
+# Everything below was fixed on 2026-10-18 before any held-back day was looked at.
+FINAL_FEATURE, FINAL_TARGET = "vix_chg_5d", "vol_surprise"
+FINAL_JUMP_QUANTILE = 0.80  # "VIX jumped" = 5-day VIX change above its development 80th pct
+FINAL_BAR = {"min_jump_days": 30, "min_episodes": 3, "min_gap": 0.10, "min_hit_rate": 0.55}
+EPISODE_GAP_DAYS = 10  # jump days at least this many trading days apart start a new episode
+
+
+def final_test(nifty_table: pd.DataFrame) -> dict:
+    """Held-back days of NIFTY only, with the threshold taken from the development period."""
+    t = nifty_table[[FINAL_FEATURE, FINAL_TARGET]].dropna()
+    cut = pd.Timestamp(VALIDATION_FROM)
+    dev, val = dev_only(nifty_table.assign(symbol="NIFTY")), t[t.index >= cut]
+    dev = dev[[FINAL_FEATURE, FINAL_TARGET]].dropna()
+    info: dict = {"val_days": len(val), "first": val.index.min(), "last": val.index.max()}
+    if dev.empty or val.empty:
+        info.update(passed=False, checks={"Held-back days with VIX and a full next month": False})
+        return info
+    threshold = float(dev[FINAL_FEATURE].quantile(FINAL_JUMP_QUANTILE))
+    jump = val[FINAL_FEATURE] > threshold
+    pos = np.flatnonzero(jump.to_numpy())
+    episodes = int(len(pos) > 0) + int((np.diff(pos) >= EPISODE_GAP_DAYS).sum()) if len(pos) else 0
+    j, o = val.loc[jump, FINAL_TARGET], val.loc[~jump, FINAL_TARGET]
+    dj, do = dev.loc[dev[FINAL_FEATURE] > threshold, FINAL_TARGET], \
+        dev.loc[dev[FINAL_FEATURE] <= threshold, FINAL_TARGET]
+    month_end = val.groupby(val.index.to_period("M")).tail(1)
+    info.update(threshold=threshold, jump_days=int(jump.sum()), episodes=episodes,
+                jump_mean=j.mean(), other_mean=o.mean(), gap=j.mean() - o.mean(),
+                hit_rate=float((j > 0).mean()) if len(j) else np.nan,
+                dev_gap=dj.mean() - do.mean(), dev_hit_rate=float((dj > 0).mean()),
+                months=len(month_end), monthly_ic=_spearman(month_end[FINAL_FEATURE],
+                                                            month_end[FINAL_TARGET]))
+    b = FINAL_BAR
+    checks = {
+        f"At least {b['min_jump_days']} VIX-jump days": info["jump_days"] >= b["min_jump_days"],
+        f"At least {b['min_episodes']} separate jump episodes": episodes >= b["min_episodes"],
+        f"Next month more volatile after jumps than other days by at least {b['min_gap']:g} "
+        "(log)": bool(info["gap"] >= b["min_gap"]),
+        f"Next month above HV20 on at least {b['min_hit_rate']:.0%} of jump days":
+            bool(info["hit_rate"] >= b["min_hit_rate"]),
+        "Month-end rank correlation positive, as in development": bool(info["monthly_ic"] > 0),
+    }
+    info.update(checks=checks, passed=all(checks.values()))
+    return info
+
+
+def final_markdown(info: dict, generated: str) -> str:
+    f = ss._fmt
+    verdict = "PASSED" if info["passed"] else "FAILED"
+    lines = [f"# Final test of the VIX-jump volatility warning ({SCREEN_VERSION}): {verdict}", "",
+             f"Generated {generated}. Held-back period only (from {VALIDATION_FROM}), NIFTY. Rule: "
+             f"on a day when India VIX's 5-day change is above its development "
+             f"{FINAL_JUMP_QUANTILE:.0%} level, expect NIFTY's next {VOL_WINDOW} trading days to be "
+             "more volatile than its HV20. Intended use: **no option selling on those days**. "
+             "Not a buy/sell signal. The bar below was written in code before this ran.", "",
+             "| Check | Result |", "|---|---|"]
+    lines += [f"| {k} | {'PASS' if v else 'FAIL'} |" for k, v in info["checks"].items()]
+    if "threshold" in info:
+        lines += ["", "| | Development | Held back |", "|---|---|---|",
+                  f"| Days with VIX and a full next month | – | {info['val_days']} "
+                  f"({info['first']:%Y-%m-%d} to {info['last']:%Y-%m-%d}) |",
+                  f"| VIX-jump threshold (5-day change, %) | {f(info['threshold'], 1)} | same |",
+                  f"| Jump days / episodes | – | {info['jump_days']} / {info['episodes']} |",
+                  f"| Volatility surprise after jumps minus other days (log) | "
+                  f"{f(info['dev_gap'])} | {f(info['gap'])} |",
+                  f"| Jump days followed by a more volatile month | "
+                  f"{f(info['dev_hit_rate'] * 100, 0)}% | {f(info['hit_rate'] * 100, 0)}% |",
+                  f"| Month-end rank correlation ({info['months']} months) | {f(0.405, 3)} | "
+                  f"{f(info['monthly_ic'], 3)} |"]
+    lines += ["", "A log gap of 0.10 means about 10% more realised volatility. Neighbouring jump "
+              "days share most of their next month, so episodes matter more than days.", "",
+              "This test is run once. If it failed, the rule is not changed and re-tested on the "
+              "same data; that would be fitting to luck.", ""]
+    return "\n".join(lines)

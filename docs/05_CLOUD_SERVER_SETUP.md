@@ -196,6 +196,7 @@ The dashboard banner disappears once only real data is shown.
 | `~/tradex/deploy/tradex.sh hourly-final` | One-time final test of hourly breakout (variant D) on the held-back period; report in `~/tradex/reports/hourly_final.md` |
 | `~/tradex/deploy/tradex.sh vix-study` | Fetch India VIX history, then compare it with NIFTY's realised volatility on the development years; report in `~/tradex/reports/vix_study.md` |
 | `~/tradex/deploy/tradex.sh screen` | One-shot screen of all 26 catalog metrics that have history against the next 5/10/20-day return and volatility surprise, development years only, corrected for testing many at once; report in `~/tradex/reports/feature_screen.md` |
+| `~/tradex/deploy/tradex.sh vix-filter-final` | One-time final test of the VIX-jump volatility warning (the screen's only survivor) on the held-back period; report in `~/tradex/reports/vix_filter_final.md`. Run once only |
 | `~/tradex/deploy/tradex.sh chain-fields` | Show which fields Groww sends in an option chain (stores nothing). The collector stores the chains itself every trading day from 15:15 IST |
 | `~/tradex/deploy/tradex.sh logs collector` | Live collector log (Ctrl+C to leave) |
 | `~/tradex/deploy/tradex.sh restart collector` | Restart one part |

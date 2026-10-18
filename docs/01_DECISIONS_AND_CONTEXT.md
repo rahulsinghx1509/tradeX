@@ -218,3 +218,15 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
     non-overlapping observation per month;
   - pass bar |t| >= 4.0 (cross-section) / 3.0 (market) on top of BH, calibrated on 40 simulated
     random-price worlds so a false survivor appears in about 1 world in 20.
+- **FS-1.1 result on the server (2026-10-18):** 1 survivor of 104. No metric predicts price
+  direction (VIX vs returns t 1.7; build-up, OI, basis, volume near zero): the seventh study to
+  find no daily direction edge on these 12. The survivor: `vix_chg_5d` vs volatility surprise
+  (market test, IC +0.41, t 3.3 vs bar 3.0, halves +0.33 / +0.46): after India VIX rises over 5
+  days, NIFTY's next month tends to be more volatile than its HV20. A volatility warning, not a
+  buy/sell signal; one simulated random market also reached t 3.3, so it is treated as "maybe".
+- One-time final test written (`deploy/tradex.sh vix-filter-final`), bar fixed in code before any
+  held-back day was looked at: "VIX jumped" = 5-day change above its development 80th
+  percentile; held-back NIFTY days need >= 30 jump days, >= 3 separate episodes, next-month
+  volatility surprise after jumps above other days by >= 0.10 (log), >= 55% of jump days followed
+  by a month above HV20, and a positive month-end rank correlation. If it passes, its only use is
+  a NO TRADE filter for option selling. If it fails, it is dropped, not re-tuned.
