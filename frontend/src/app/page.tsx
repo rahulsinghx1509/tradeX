@@ -95,7 +95,7 @@ export default function Dashboard() {
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {overview.underlyings.map((u) => (
-                <OverviewCard key={u.symbol} symbol={u.symbol} index={u.index} futures={u.futures} />
+                <OverviewCard key={u.symbol} symbol={u.symbol} index={u.index} futures={u.futures} metrics={u.metrics ?? null} />
               ))}
             </div>
 
