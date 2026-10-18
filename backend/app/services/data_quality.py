@@ -14,7 +14,7 @@ Rules:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app.core.market_time import expected_bar_starts, is_bar_complete, to_ist
 from app.providers.base import Candle
@@ -117,13 +117,29 @@ def check_missing_values(candles: list[Candle], expect_volume: bool, expect_oi: 
 
 
 def check_gaps(
-    candles: list[Candle], timeframe: str, holidays: frozenset[date] | None = None
+    candles: list[Candle], timeframe: str, holidays: frozenset[date] | None = None,
+    reference_times: list[datetime] | None = None,
 ) -> CheckResult:
-    """Expected candles (market days and hours) that did not arrive."""
+    """Expected candles (market days and hours) that did not arrive.
+
+    `reference_times`: candle times of the market reference (the NIFTY index) over the same
+    period. When given, they define which candles should exist, so exchange holidays, special
+    sessions (budget-day Saturdays, Muhurat trading) and unscheduled closures are handled from
+    real data instead of a hand-kept list. The holiday calendar covers anything after the
+    reference's latest candle.
+    """
     if not candles:
         return CheckResult("missing_candles", WARN, {"reason": "no candles received"})
     have = {c.time for c in candles}
-    expected = expected_bar_starts(candles[0].time, candles[-1].time, timeframe, holidays)
+    first, last = candles[0].time, candles[-1].time
+    if reference_times:
+        ref = [t for t in reference_times if first <= t <= last]
+        ref_last = max(reference_times)
+        tail = (expected_bar_starts(ref_last + timedelta(seconds=1), last, timeframe, holidays)
+                if last > ref_last else [])
+        expected, basis = sorted(set(ref) | set(tail)), "NIFTY index candles"
+    else:
+        expected, basis = expected_bar_starts(first, last, timeframe, holidays), "holiday calendar"
     missing = [t for t in expected if t not in have]
     unexpected = sorted(have - set(expected))
     return CheckResult(
@@ -135,6 +151,6 @@ def check_gaps(
             "missing_examples": [to_ist(t).isoformat() for t in missing[:MAX_EXAMPLES]],
             "unexpected_times": len(unexpected),
             "unexpected_examples": [to_ist(t).isoformat() for t in unexpected[:MAX_EXAMPLES]],
-            "note": "Holidays count as missing until app/data/nse_holidays.csv is filled in.",
+            "expected_from": basis,
         },
     )

@@ -76,3 +76,15 @@ def test_old_invalid_candle_warns_but_newest_invalid_fails():
     assert res.status == "WARN"
     _, res = dq.validate_ohlc([c(T0), c(t1, h=99.5)])
     assert res.status == "FAIL"
+
+
+def test_gaps_follow_nifty_reference_days():
+    day1 = bar_starts_for_day(T0.date(), "1d")[0]
+    holiday = day1 + timedelta(days=1)  # a weekday NIFTY did not trade: not a gap
+    day3 = day1 + timedelta(days=2)
+    res = dq.check_gaps([c(day1), c(day3)], "1d", frozenset(), reference_times=[day1, day3])
+    assert res.status == dq.PASS and res.details["expected_from"] == "NIFTY index candles"
+    # A day NIFTY traded but this instrument has no candle is a real gap.
+    res = dq.check_gaps([c(day1), c(day3)], "1d", frozenset(),
+                        reference_times=[day1, holiday, day3])
+    assert res.status == dq.WARN and res.details["missing"] == 1
