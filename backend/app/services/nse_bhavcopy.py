@@ -6,8 +6,8 @@ price, open interest (OI), change in OI and volume. From it we can rebuild optio
 
 Two formats exist (both confirmed downloadable from our server on 2026-10-18, `tradex.sh sources`):
 - new "UDiFF" file: also has the underlying price and lot size;
-- old file (NSE stopped it in July 2024): no underlying price, so the nearest future's close
-  is used to pick strikes. For a day, the new file is tried first, then the old one.
+- old file (exists 2010 to July 2024): no underlying price, so the nearest future's close
+  is used to pick strikes. The likelier format for the date is tried first, then the other.
 
 What is kept, per underlying and day (the full file has ~50-90k rows; storing all would fill
 the small server):
@@ -41,6 +41,7 @@ OPTION_EXPIRIES = 2
 FUTURE_EXPIRIES = 2
 STRIKE_BAND = 0.15
 PAUSE_SECONDS = 1.0
+UDIFF_FROM = date(2024, 7, 1)  # server check 2026-10-18: UDiFF 404 on 2023-01-02, old file 404 now
 
 
 def udiff_url(d: date) -> str:
@@ -197,7 +198,10 @@ class Downloader:
 
 def fetch_day(dl: Downloader, d: date, symbols: set[str]) -> tuple[str, list[Row]] | None:
     """('udiff' or 'old', kept rows) for a day, or None when neither file exists."""
-    for fmt, url, parse in (("udiff", udiff_url(d), parse_udiff), ("old", old_url(d), parse_old)):
+    order = [("udiff", udiff_url(d), parse_udiff), ("old", old_url(d), parse_old)]
+    if d < UDIFF_FROM:
+        order.reverse()  # saves one 404 per day on old dates
+    for fmt, url, parse in order:
         resp = dl.get(url)
         if resp is not None:
             return fmt, select_rows(parse(unzip(resp.content), symbols), d)
