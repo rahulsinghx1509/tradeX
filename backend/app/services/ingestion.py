@@ -131,7 +131,9 @@ def ingest_candles(session: Session, provider: MarketDataProvider, instrument: I
     candles, filled = _fill_daily_open(session, instrument, timeframe, candles)
     # Older problems are logged but don't raise a WARN (see dq.RECENT_DAYS).
     recent_from = candles[-1].time - timedelta(days=dq.RECENT_DAYS) if candles else None
-    problems, c3 = dq.validate_ohlc(candles, spike_check=instrument.instrument_type != "OPTION",
+    # Options and India VIX genuinely jump this much, so they are not spike-checked.
+    spike_check = instrument.instrument_type != "OPTION" and instrument.symbol != dq.VIX_SYMBOL
+    problems, c3 = dq.validate_ohlc(candles, spike_check=spike_check,
                                     recent_from=recent_from)
     is_fno = instrument.segment == "FNO"
     expect_volume = is_fno or instrument.instrument_type == "STOCK"

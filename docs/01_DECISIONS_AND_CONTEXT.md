@@ -175,3 +175,14 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   +0.05R (within noise). B, C, E failed a half. Final test of D (`deploy/tradex.sh hourly-final`),
   bar fixed before any validation result: ≥100 trades, ≥+0.10R, PF ≥1.2, beats A on the same
   period, no instrument >50% of total R. Run once; if it fails, this rule family stops.
+- **Final test of D FAILED** (2025-04-01 to 2026-10-16): D 327 trades, −0.07R, PF 0.86; A 482
+  trades, −0.03R, PF 0.94. Only the trade count passed; NIFTY −11R, FINNIFTY −9R. Six studies
+  now agree: no price-direction edge (daily or hourly) on these 12 instruments. Not re-tuned.
+
+## 14. India VIX study (2026-10-18)
+
+- RK chose to test a volatility edge instead of direction: does India VIX (30-day implied
+  volatility of NIFTY options) usually exceed NIFTY's realised volatility over the next 21
+  trading days? Study VRP-1.0 (`deploy/tradex.sh vix-study`), development years only, a study
+  and not a trade. VIX history is fetched as `NSE-INDIAVIX` (`NOT_VERIFIED` until it loads) and
+  stored as an inactive instrument; VIX candles are not spike-checked (real 50% jumps happen).
