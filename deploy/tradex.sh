@@ -19,6 +19,7 @@ case "${1:-help}" in
   backfill)   script backfill_candles.py "${@:2}" ;;
   study)      script signal_study.py "${@:2}" && echo "Report: reports/signal_study.md" ;;
   variants)   script signal_study.py --variants "${@:2}" && echo "Report: reports/long_variants.md" ;;
+  futures-history) script load_futures_history.py "${@:2}" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
@@ -38,6 +39,7 @@ Usage: deploy/tradex.sh <command>
   backfill     load historical candles
   study        backtest the four core readings (writes reports/signal_study.md)
   variants     compare long-only variants, development years only (reports/long_variants.md)
+  futures-history  load daily candles + OI of expired futures since 2020 (safe to re-run)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)
   final        one-time final test of variant C on held-back years (reports/final_test.md)
   chat-id      print your Telegram chat ID

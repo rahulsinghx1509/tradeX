@@ -198,3 +198,20 @@ def test_sample_stocks_have_volume_but_no_oi(provider):
     assert stock.instrument_type == "STOCK"
     candles = provider.get_candles(stock, "1d", NOW - timedelta(days=10), NOW)
     assert candles and all(c.volume is not None and c.open_interest is None for c in candles)
+
+
+class ExpiriesGroww:
+    def get_expiries(self, **kw):
+        return {"expiries": ["2023-06-01", "2023-06-28", "2023-06-29"]}
+
+    def get_contracts(self, **kw):
+        if kw["expiry_date"] == "2023-06-28":
+            return {"contracts": ["NSE-NIFTY-28Jun23-18000-CE", "NSE-NIFTY-28Jun23-FUT"]}
+        return {"contracts": ["NSE-NIFTY-x-18000-CE"]}  # options only
+
+
+def test_groww_expired_future_skips_option_only_expiries():
+    p = GrowwProvider(Settings(), client=ExpiriesGroww())
+    info = p.expired_future("NIFTY", 2023, 6)
+    assert info.provider_symbol == "NSE-NIFTY-28Jun23-FUT"
+    assert info.expiry_date == date(2023, 6, 28) and info.lot_size is None
