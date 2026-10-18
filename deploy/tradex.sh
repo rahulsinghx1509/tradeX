@@ -17,6 +17,7 @@ case "${1:-help}" in
   logs)       dc logs --tail 100 -f "${@:2}" ;;
   verify)     script verify_provider_capabilities.py && echo "Report: reports/provider_capability_report.md" ;;
   backfill)   script backfill_candles.py "${@:2}" ;;
+  study)      script signal_study.py "${@:2}" && echo "Report: reports/signal_study.md" ;;
   chat-id)    script telegram_chat_id.py ;;
   test-alert) script send_test_alert.py ;;
   backup)     deploy/backup.sh ;;
@@ -32,6 +33,7 @@ Usage: deploy/tradex.sh <command>
   logs [X]     follow the logs, e.g. logs collector   (Ctrl+C to leave)
   verify       Milestone 0: check what the Groww API really provides
   backfill     load historical candles
+  study        backtest the four core readings (writes reports/signal_study.md)
   chat-id      print your Telegram chat ID
   test-alert   send a test Telegram message
   backup       back up the database now
