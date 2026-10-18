@@ -4,11 +4,14 @@ Read-only: it only reads candles from the database. Writes
 reports/signal_study.md (the summary) and reports/signal_study_episodes.csv (every signal).
 With --variants it instead compares long-only variants on the development period and writes
 reports/long_variants.md and reports/long_variants_trades.csv.
+With --variants --final it runs the one-time final test of variant C on the held-back period
+and writes reports/final_test.md and reports/final_test_trades.csv.
 
 Usage (from the repository root):
     python scripts/signal_study.py
     python scripts/signal_study.py --symbols NIFTY,BANKNIFTY
     python scripts/signal_study.py --variants
+    python scripts/signal_study.py --variants --final
 On the server: deploy/tradex.sh study  (or: deploy/tradex.sh variants)
 """
 
@@ -33,6 +36,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--symbols", default=",".join(s.underlying_list))
     p.add_argument("--variants", action="store_true", help="compare long-only variants instead")
+    p.add_argument("--final", action="store_true", help="with --variants: one-time final test of C")
     args = p.parse_args()
     symbols = [x.strip().upper() for x in args.symbols.split(",") if x.strip()]
 
@@ -50,7 +54,11 @@ def main() -> int:
             print(f"  {sym}: {len(frames[sym])} daily candles")
 
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    if args.variants:
+    if args.variants and args.final:
+        trades, info = long_variants.final_test(frames)
+        report = long_variants.final_markdown(trades, info, generated)
+        name, table = "final_test", trades
+    elif args.variants:
         trades, info = long_variants.run(frames)
         report = long_variants.to_markdown(trades, info, generated)
         name, table = "long_variants", trades
@@ -62,7 +70,7 @@ def main() -> int:
         report = "**SAMPLE DATA: synthetic prices, results mean nothing.**\n\n" + report
     out = Path(REPO_ROOT) / "reports"
     out.mkdir(exist_ok=True)
-    csv = "long_variants_trades.csv" if args.variants else "signal_study_episodes.csv"
+    csv = f"{name}_trades.csv" if args.variants else "signal_study_episodes.csv"
     (out / f"{name}.md").write_text(report, encoding="utf-8")
     table.to_csv(out / csv, index=False)
     print("\n" + report)
