@@ -103,7 +103,9 @@ def test_old_problems_are_logged_but_do_not_warn():
     # The same problems on a recent candle still warn.
     recent = [c(new - timedelta(days=1), h=99.5, o=None, v=None), c(new)]
     assert dq.validate_ohlc(recent, recent_from=recent_from)[1].status == dq.WARN
-    assert dq.check_missing_open(recent, recent_from=recent_from).status == dq.WARN
+    # Missing open is a known Groww gap: logged, never a WARN.
+    res = dq.check_missing_open(recent, recent_from=recent_from)
+    assert res.status == dq.PASS and res.details["missing_open_recent"] == 1
     assert dq.check_missing_values(recent, True, False, recent_from=recent_from).status == dq.WARN
 
 

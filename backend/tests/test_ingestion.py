@@ -119,4 +119,4 @@ def test_daily_missing_open_stays_valid_and_takes_open_from_1h(session, provider
         MarketCandle.timeframe == "1h", MarketCandle.candle_time == filled[-1].candle_time))
     assert filled[-1].open == first_1h.open
     check = next(c for c in res.checks if c.check_name == "missing_open")
-    assert check.status == "WARN" and check.details["open_filled_from_1h"] == len(filled)
+    assert check.status == "PASS" and check.details["open_filled_from_1h"] == len(filled)

@@ -124,3 +124,5 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   and examples in `data_quality_log`, but give PASS.
 - Exact duplicate candles (where two 180-day request windows overlap) are merged and counted, PASS.
   Conflicting duplicates stay FAIL.
+- Missing open price is always PASS (counts still logged). Groww sends no 09:15 open for stocks and stock futures:
+  the daily candle and the first 1h candle both lack it (checked on the server 2026-10-18). No metric uses the open.
