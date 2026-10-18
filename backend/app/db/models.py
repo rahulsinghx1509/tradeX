@@ -120,6 +120,29 @@ class MarketSnapshot(Base):
     is_stale: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class OptionChainSnapshot(Base):
+    """The whole option chain of one expiry, once per trading day near the close.
+
+    Groww keeps no option-chain history, so TradeX collects its own. The chain is stored
+    exactly as Groww sent it (`payload`), so no field is lost before its meaning is verified.
+    """
+
+    __tablename__ = "option_chain_snapshots"
+    __table_args__ = (
+        UniqueConstraint("provider", "symbol", "expiry_date", "trade_date", name="uq_chain_day"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20))
+    symbol: Mapped[str] = mapped_column(String(32))  # underlying, e.g. NIFTY
+    expiry_date: Mapped[date] = mapped_column(Date)
+    trade_date: Mapped[date] = mapped_column(Date)  # IST trading day of the snapshot
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    strikes: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON)
+    is_sample: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class IngestionRun(Base):
     """One row per collection job, so failures and freshness can be audited."""
 

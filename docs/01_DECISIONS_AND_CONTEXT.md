@@ -144,3 +144,15 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   swapped places. Price-trend rules on these underlyings stop here.
 - Next (RK's choice): study the derivatives data, futures open interest and options. Step 1 is
   `deploy/tradex.sh probe`, which measures how far back Groww keeps that history.
+
+## 12. Open interest study and option-chain collection (2026-10-18)
+
+- The expired monthly futures since 2020 are loaded (`deploy/tradex.sh futures-history`, 80 of 81
+  months per underlying). In the OI study OI-1.0 the textbook build-up readings failed: at most a
+  faint contrarian effect, about 0.2% over 10 days, whose sign flips between years. Five studies
+  now agree that daily data on these 12 instruments has no dependable direction edge.
+- RK's choice: collect our own option-chain history. From 15:15 IST each trading day the collector
+  stores the full chain of the next 2 expiries for every underlying, exactly as Groww sends it
+  (table `option_chain_snapshots`). Field meanings are `NOT_VERIFIED` until checked with
+  `deploy/tradex.sh chain-fields`. After 6–12 months this supports volatility studies (IV vs
+  realised volatility, PCR, OI by strike).
