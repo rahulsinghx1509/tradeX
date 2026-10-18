@@ -106,3 +106,13 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   would cost ~₹1,700/month more). Dashboard is private via Tailscale; public port 80 stays closed.
   The server pulls `main` every 5 minutes, so Claude never needs SSH access. Groww key lives only in the server's `.env`.
   Setup guide: `docs/05_CLOUD_SERVER_SETUP.md`.
+
+## 9. Core metrics (Milestone 2, version M2-1.0, 2026-10-18)
+
+- Computed on the underlying's own VALID, completed daily candles (index value / stock cash price), not on futures.
+- EMA 20/50/200, weekly EMA 20, ADX/+DI/−DI 14, RSI 14, ATR 14 (Wilder smoothing), ATR % of price,
+  distance from EMA20 in ATRs, and 20-day relative strength vs NIFTY (ratio of 20-day returns; >1 = stronger than NIFTY).
+- Warm-up: EMA/ADX/RSI/ATR are hidden (missing) below 250 daily candles, EMA200 below 400, weekly trend below 60 weeks.
+- The four direction readings D1–D4 from the strategy spec (§5) are shown as UP / DOWN / NEUTRAL / MISSING.
+  They are information only. No LONG/SHORT signal is produced until the rules are backtested.
+- Code: `backend/app/services/indicators.py`, `backend/app/services/metrics.py`; served in `/api/market/overview` → `metrics`.

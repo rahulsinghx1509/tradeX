@@ -1,6 +1,23 @@
-# NSE trading holidays (equity and F&O segments).
-# Add each holiday as YYYY-MM-DD from NSE's official circular:
+# NSE trading holidays (equity and F&O segments), weekdays only.
+# Source for 2026: Groww's NSE holiday page (https://groww.in/p/nse-holidays), read 2026-10-18.
+# Check against NSE's official circular when it is published for a new year:
 #   https://www.nseindia.com/resources/exchange-communication-holidays
-# Until this list is filled in, holidays show up as "missing candle" warnings
-# in the data-quality log. That is expected and harmless.
+# Past years are not needed here: the data-quality gap check takes market days from the
+# NIFTY index candles themselves. This list tells the collector which days to expect no data.
 date,description
+2026-01-15,Municipal Corporation Election - Maharashtra
+2026-01-26,Republic Day
+2026-03-03,Holi
+2026-03-26,Shri Ram Navami
+2026-03-31,Shri Mahavir Jayanti
+2026-04-03,Good Friday
+2026-04-14,Dr. Baba Saheb Ambedkar Jayanti
+2026-05-01,Maharashtra Day
+2026-05-28,Bakri Id
+2026-06-26,Muharram
+2026-09-14,Ganesh Chaturthi
+2026-10-02,Mahatma Gandhi Jayanti
+2026-10-20,Dussehra
+2026-11-10,Diwali-Balipratipada
+2026-11-24,Prakash Gurpurb Sri Guru Nanak Dev
+2026-12-25,Christmas

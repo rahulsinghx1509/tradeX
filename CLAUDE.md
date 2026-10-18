@@ -31,7 +31,8 @@ Read these before doing any work:
 - ✅ Milestone 1: pipeline (providers → data-quality → PostgreSQL → FastAPI → Next.js), Telegram sender,
   market-hours collector. Tested with SAMPLE data only. Groww adapter written from docs, `NOT_VERIFIED`.
 - ✅ Hosting chosen: AWS Lightsail Mumbai ($7 / 1 GB to start), everything in Docker Compose (`deploy/`), guide in `docs/05_CLOUD_SERVER_SETUP.md`.
-- 👉 Next: Milestone 0 (`scripts/verify_provider_capabilities.py` with the owner's key), then Milestone 2 core metrics.
+- ✅ Milestone 2 core metrics (EMA, ADX, RSI, ATR, relative strength, D1–D4 readings) on each dashboard card. Not signals.
+- 👉 Next: backtest the D1–D4 rules before any LONG/SHORT signal.
 
 ## Code map
 

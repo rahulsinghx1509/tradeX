@@ -10,6 +10,7 @@ from app.core.market_time import from_db, is_market_open, to_ist, utc_now
 from app.db.models import DataQualityLog, IngestionRun, Instrument, MarketCandle
 from app.db.session import get_session
 from app.providers.factory import get_provider
+from app.services import metrics as core_metrics
 from app.services.freshness import candle_freshness
 
 router = APIRouter(prefix="/api")
@@ -82,6 +83,7 @@ def overview(session: Session = Depends(get_session)) -> dict:
     now = utc_now()
     settings = get_settings()
     underlyings = []
+    spots: list[Instrument] = []
     for sym in settings.underlying_list:
         insts = list(session.scalars(
             select(Instrument).where(Instrument.symbol == sym, Instrument.is_active,
@@ -90,17 +92,26 @@ def overview(session: Session = Depends(get_session)) -> dict:
         # "index" = the underlying itself: the index, or the stock's cash price.
         index = next((i for i in insts if i.instrument_type in ("INDEX", "STOCK")), None)
         futures = [i for i in insts if i.instrument_type == "FUTURE"]
+        if index:
+            spots.append(index)
         underlyings.append({
             "symbol": sym,
             "index": _instrument_summary(session, index, now) if index else None,
             "futures": [_instrument_summary(session, f, now) for f in futures],
+            "_spot_id": index.id if index else None,
         })
+    # Core metrics (Milestone 2) on the underlying's own daily candles. Information only.
+    computed = core_metrics.compute_for_instruments(session, spots, now)
+    for u in underlyings:
+        m = computed.get(u.pop("_spot_id"))
+        u["metrics"] = (asdict(m) | {"as_of": m.as_of.isoformat() if m.as_of else None}) if m else None
     any_sample = any((u["index"] or {}).get("is_sample") for u in underlyings)
     return {
         "generated_at": now.isoformat(),
         "market_open": is_market_open(now),
         "data_provider": settings.data_provider,
         "contains_sample_data": any_sample,
+        "metrics_version": core_metrics.METRICS_VERSION,
         "signal": {"status": "NOT_BUILT",
                    "message": "Trade signals are not built yet (rule engine comes after "
                               "core metrics and backtesting)."},

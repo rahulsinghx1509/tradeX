@@ -1,10 +1,70 @@
 import { StatusBadge } from "@/components/Badges";
-import { formatIst, formatNumber, type InstrumentSummary } from "@/lib/api";
+import { formatIst, formatNumber, type CoreMetrics, type InstrumentSummary, type Reading } from "@/lib/api";
 
-export default function OverviewCard({ symbol, index, futures }: {
+const READINGS: [string, string][] = [
+  ["D1_daily_trend", "Daily trend"],
+  ["D2_weekly_trend", "Weekly trend"],
+  ["D3_trend_strength", "Trend strength"],
+  ["D4_momentum", "Momentum"],
+];
+
+const READING_STYLE: Record<Reading, string> = {
+  UP: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  DOWN: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  NEUTRAL: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  MISSING: "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+};
+
+function Metric({ label, value, digits = 2 }: { label: string; value: number | null | undefined; digits?: number }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="tabular-nums">{value === null || value === undefined ? "missing" : formatNumber(value, digits)}</dd>
+    </div>
+  );
+}
+
+function MetricsPanel({ metrics }: { metrics: CoreMetrics }) {
+  const v = metrics.values;
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+      <div className="flex flex-wrap gap-1">
+        {READINGS.map(([key, label]) => {
+          const r = metrics.readings[key] ?? "MISSING";
+          return (
+            <span key={key} className={`rounded px-1.5 py-0.5 text-xs font-medium ${READING_STYLE[r]}`}>
+              {label}: {r.toLowerCase()}
+            </span>
+          );
+        })}
+      </div>
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+        <Metric label="EMA 20" value={v.ema20} />
+        <Metric label="EMA 50" value={v.ema50} />
+        <Metric label="EMA 200" value={v.ema200} />
+        <Metric label="Weekly EMA 20" value={v.weekly_ema20} />
+        <Metric label="ADX 14" value={v.adx14} digits={1} />
+        <Metric label="RSI 14" value={v.rsi14} digits={1} />
+        <Metric label="ATR 14" value={v.atr14} />
+        <Metric label="ATR % of price" value={v.atr_pct} />
+        <Metric label="From EMA20 (ATRs)" value={v.ema20_distance_atr} />
+        <Metric label="RS 20d vs NIFTY" value={v.rs20_vs_nifty} digits={3} />
+      </dl>
+      <p className="mt-2 text-xs text-slate-500">
+        From {metrics.bars} daily candles up to {formatIst(metrics.as_of, false)}. Information only, not a trade signal.
+      </p>
+      {metrics.notes.map((n) => (
+        <p key={n} className="text-xs text-amber-700 dark:text-amber-400">{n}</p>
+      ))}
+    </div>
+  );
+}
+
+export default function OverviewCard({ symbol, index, futures, metrics }: {
   symbol: string;
   index: InstrumentSummary | null;
   futures: InstrumentSummary[];
+  metrics: CoreMetrics | null;
 }) {
   const change = index?.change ?? null;
   const up = change !== null && change >= 0;
@@ -30,6 +90,7 @@ export default function OverviewCard({ symbol, index, futures }: {
       ) : (
         <p className="mt-2 text-sm text-slate-500">No data loaded yet. Run scripts/backfill_candles.py.</p>
       )}
+      {metrics && metrics.status !== "NO_DATA" && <MetricsPanel metrics={metrics} />}
       {futures.length > 0 && (
         <table className="mt-4 w-full text-sm">
           <thead className="text-left text-xs uppercase text-slate-500">

@@ -133,7 +133,8 @@ def ingest_candles(session: Session, provider: MarketDataProvider, instrument: I
     is_fno = instrument.segment == "FNO"
     expect_volume = is_fno or instrument.instrument_type == "STOCK"
     c4 = dq.check_missing_values(candles, expect_volume=expect_volume, expect_oi=is_fno)
-    c5 = dq.check_gaps(candles, timeframe)
+    c5 = dq.check_gaps(candles, timeframe,
+                       reference_times=_reference_times(session, instrument, timeframe, candles))
     c6 = dq.check_missing_open(candles, filled)
     checks = [dq.CheckResult("source_availability", dq.PASS, {"received": len(raw)}),
               c1, c2, c3, c4, c5, c6]
@@ -164,6 +165,27 @@ def ingest_candles(session: Session, provider: MarketDataProvider, instrument: I
     status = "SUCCESS"
     _finish(session, run, status)
     return IngestResult(run.id, status, len(raw), len(rows), checks)
+
+
+# The market reference: every other instrument should have a candle wherever NIFTY has one.
+REFERENCE_SYMBOL = "NIFTY"
+
+
+def _reference_times(session: Session, instrument: Instrument, timeframe: str,
+                     candles: list[Candle]) -> list[datetime] | None:
+    """NIFTY index candle times covering `candles`, or None (use the holiday calendar)."""
+    if not candles or (instrument.symbol == REFERENCE_SYMBOL and instrument.instrument_type == "INDEX"):
+        return None
+    ref = session.scalar(select(Instrument.id).where(
+        Instrument.provider == instrument.provider, Instrument.symbol == REFERENCE_SYMBOL,
+        Instrument.instrument_type == "INDEX"))
+    if ref is None:
+        return None
+    times = session.scalars(select(MarketCandle.candle_time).where(
+        MarketCandle.instrument_id == ref, MarketCandle.timeframe == timeframe,
+        MarketCandle.candle_time >= candles[0].time, MarketCandle.candle_time <= candles[-1].time))
+    out = [from_db(t) for t in times]
+    return out or None
 
 
 def _fill_daily_open(session: Session, instrument: Instrument, timeframe: str,
