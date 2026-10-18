@@ -186,3 +186,23 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   trading days? Study VRP-1.0 (`deploy/tradex.sh vix-study`), development years only, a study
   and not a trade. VIX history is fetched as `NSE-INDIAVIX` (`NOT_VERIFIED` until it loads) and
   stored as an inactive instrument; VIX candles are not spike-checked (real 50% jumps happen).
+
+## 15. One-shot screen of every metric with history (2026-10-18)
+
+- RK asked why metrics were being added one at a time when about 60 were agreed. Sorted the
+  catalog: about 22 are rules or controls (stale data, risk limits), not predictors; about 16
+  are option-chain metrics with no history yet (collected daily from PR #18); about 14 need a
+  source outside Groww (FII/DII, GIFT Nifty, global markets, events), which costs money and
+  needs RK's approval; **26 can be tested now**. RK chose "Build full screen".
+- Study FS-1.0 (`deploy/tradex.sh screen`): one table per instrument per day with all 26 metrics
+  (price, trend, RSI, MACD, ADX, weekly trend, relative strength, correlation, HV, ATR, India
+  VIX, basis, carry, OI change, build-up, futures volume, rollover, days to expiry). Targets:
+  return over the next 5/10/20 days from D+1's close, and volatility surprise
+  (log of next-21-day realised volatility over HV20).
+- Scoring: monthly Spearman IC, t across months, Benjamini–Hochberg q < 0.10 over all 104
+  tests, same sign in both halves. Metrics built from recent volatility relate to volatility
+  surprise by construction (volatility mean-reverts): shown, marked `m`, never survivors.
+- At most 3 survivors go forward, combined into one rule whose pass bar is fixed in code before
+  a single final test on the held-back data. If none survive, the price/derivatives history on
+  these 12 has no usable daily edge, and the next evidence comes from the option chains being
+  collected.
