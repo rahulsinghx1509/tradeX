@@ -204,3 +204,70 @@ def to_markdown(tr: pd.DataFrame, info: dict, generated: str) -> str:
               f"- Trailing stop = highest close since entry − {TRAIL_ATR:g} ATR, at most "
               f"{TRAIL_MAX_HOLD} days. Strength = 20-day return minus NIFTY's.", ""]
     return "\n".join(lines)
+
+
+# Final test (spec §12). Agreed with the owner on 2026-10-18 *before* any validation result of
+# variant C was seen. Run once; do not change these numbers after looking at the result.
+FINAL_VARIANT = "C"
+FINAL_BAR = {"min_trades": 30, "min_expectancy_r": 0.15, "min_profit_factor": 1.3,
+             "max_symbol_share": 0.5}
+
+
+def final_test(frames: dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, dict]:
+    """Variant C on the validation period only: closed trades that started on or after the split."""
+    frames = {s: df for s, df in frames.items() if len(df)}
+    reference = frames.get(REFERENCE)
+    v = next(x for x in VARIANTS if x.key == FINAL_VARIANT)
+    days = [d for s, df in frames.items() for d in ss.baseline(s, df)["day"]]
+    cut = ss.split_date(days)
+    parts = [trades(s, prepare(df, reference), v) for s, df in frames.items()]
+    parts = [p for p in parts if len(p)]
+    tr = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+    if len(tr):
+        tr = tr[tr["signal_day"] >= cut].sort_values(["entry_day", "symbol"])
+    closed = tr[tr["exit_reason"] != "OPEN"] if len(tr) else tr
+    summary = ss.trade_summary(closed["r"]) if len(closed) else {"trades": 0}
+    by_symbol = closed.groupby("symbol")["r"].sum() if len(closed) else pd.Series(dtype=float)
+    total = summary.get("total_r")
+    share = (by_symbol.max() / total) if total and total > 0 else None
+    b = FINAL_BAR
+    checks = {
+        f"At least {b['min_trades']} closed trades": summary["trades"] >= b["min_trades"],
+        f"Expectancy at least +{b['min_expectancy_r']}R":
+            (summary.get("expectancy_r") or -9) >= b["min_expectancy_r"],
+        f"Profit factor at least {b['min_profit_factor']}":
+            (summary.get("profit_factor") or 0) >= b["min_profit_factor"],
+        f"No instrument above {b['max_symbol_share']:.0%} of total R":
+            share is not None and share <= b["max_symbol_share"],
+    }
+    return tr, {"split_date": cut, "summary": summary, "by_symbol": by_symbol, "share": share,
+                "checks": checks, "passed": all(checks.values()),
+                "open": int((tr["exit_reason"] == "OPEN").sum()) if len(tr) else 0}
+
+
+def final_markdown(tr: pd.DataFrame, info: dict, generated: str) -> str:
+    """The one-time final test report: the pre-agreed bar, the result and the verdict."""
+    f, s = ss._fmt, info["summary"]
+    verdict = "PASSED" if info["passed"] else "FAILED"
+    lines = [f"# Final test {VARIANTS_VERSION}: variant {FINAL_VARIANT} (trailing stop) on held-back data",
+             "", f"Generated {generated}. Validation period: {info['split_date']} onwards. "
+             "Underlying daily candles only; **no options, costs or slippage**.", "",
+             f"## Verdict: **{verdict}**", "", "| Pre-agreed check | Result |", "|---|---|"]
+    lines += [f"| {name} | {'pass' if ok else 'FAIL'} |" for name, ok in info["checks"].items()]
+    lines += ["", "| Trades | Win % | Expectancy (R) | Profit factor | Longest losing streak | "
+              "Total R | Biggest instrument share | Still open |", "|---|---|---|---|---|---|---|---|"]
+    if s["trades"]:
+        lines.append(f"| {s['trades']} | {f(s['win_pct'], 0)} | {f(s['expectancy_r'])} | "
+                     f"{f(s['profit_factor'])} | {s['max_losing_streak']} | {f(s['total_r'], 1)} | "
+                     f"{f(info['share'] * 100 if info['share'] is not None else None, 0, '%')} | "
+                     f"{info['open']} |")
+    else:
+        lines.append(f"| 0 | – | – | – | – | – | – | {info['open']} |")
+    if len(info["by_symbol"]):
+        lines += ["", "| Instrument | Trades | Total R |", "|---|---|---|"]
+        closed = tr[tr["exit_reason"] != "OPEN"]
+        for sym, total in info["by_symbol"].sort_values(ascending=False).items():
+            lines.append(f"| {sym} | {int((closed['symbol'] == sym).sum())} | {f(total, 1)} |")
+    lines += ["", "This test is run once. If it failed, the rules are not changed and re-tested on "
+              "the same data; that would be fitting to luck.", ""]
+    return "\n".join(lines)

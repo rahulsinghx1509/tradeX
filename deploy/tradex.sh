@@ -19,6 +19,7 @@ case "${1:-help}" in
   backfill)   script backfill_candles.py "${@:2}" ;;
   study)      script signal_study.py "${@:2}" && echo "Report: reports/signal_study.md" ;;
   variants)   script signal_study.py --variants "${@:2}" && echo "Report: reports/long_variants.md" ;;
+  final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
   test-alert) script send_test_alert.py ;;
   backup)     deploy/backup.sh ;;
@@ -36,6 +37,7 @@ Usage: deploy/tradex.sh <command>
   backfill     load historical candles
   study        backtest the four core readings (writes reports/signal_study.md)
   variants     compare long-only variants, development years only (reports/long_variants.md)
+  final        one-time final test of variant C on held-back years (reports/final_test.md)
   chat-id      print your Telegram chat ID
   test-alert   send a test Telegram message
   backup       back up the database now

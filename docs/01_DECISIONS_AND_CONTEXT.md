@@ -126,3 +126,15 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   Conflicting duplicates stay FAIL.
 - Missing open price is always PASS (counts still logged). Groww sends no 09:15 open for stocks and stock futures:
   the daily candle and the first 1h candle both lack it (checked on the server 2026-10-18). No metric uses the open.
+
+## 11. Backtest of the four readings (2026-10-18)
+
+- Signal study SS-1.0: the readings as specified have no edge. Shorts lost money in both periods,
+  and longs were only slightly positive. Shorts are dropped.
+- Long-only variants LV-1.0, scored on the development years only. The trailing stop (variant C:
+  highest close − 3 ATR, no target, at most 40 days) was the only candidate: 107 trades, +0.23R,
+  profit factor 1.45. It was flat in the second half, though, and BHARTIARTL carried most of it.
+- RK chose a one-time final test of C on the held-back years. The pass bar was agreed before
+  any result was seen: at least 30 trades, expectancy +0.15R or more, profit factor 1.3 or more,
+  and no instrument above 50% of total R. If C fails, the rules are not tuned and re-tested on
+  the same data.

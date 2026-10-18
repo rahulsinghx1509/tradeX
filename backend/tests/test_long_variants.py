@@ -75,3 +75,18 @@ def test_run_reports_development_only():
     assert len(tr) and (tr["exit_day"] < info["split_date"]).all()
     md = lv.to_markdown(tr, info, "now")
     assert "held back" in md and "| A |" in md and "| F |" in md
+
+
+def test_final_test_uses_validation_only_and_applies_the_bar():
+    frames = {"NIFTY": _frame(_wave()), "X": _frame(_wave()[::-1].copy())}
+    tr, info = lv.final_test(frames)
+    assert len(tr) and (tr["signal_day"] >= info["split_date"]).all()
+    assert set(tr["variant"]) == {lv.FINAL_VARIANT}
+    assert info["passed"] == all(info["checks"].values())
+    md = lv.final_markdown(tr, info, "now")
+    assert "Verdict" in md and ("PASSED" in md or "FAILED" in md)
+
+
+def test_final_test_fails_with_too_few_trades():
+    tr, info = lv.final_test({"NIFTY": _frame(_wave(400))})
+    assert not info["passed"]
