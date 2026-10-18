@@ -36,13 +36,14 @@ Read these before doing any work:
 - ✅ VJ-1.0 VIX-jump volatility warning passed its one-time final test: dashboard banner + Telegram
   alert, option selling NO TRADE on jump days. The only tested rule; not a buy/sell signal.
 - ✅ Every catalog metric mapped to a data source (`docs/07_DATA_SOURCES.md`); free sources need checking from the server (`tradex.sh sources`).
-- 👉 Next: if the free NSE F&O bhavcopy downloads, load its history and test option metrics now; option chains also collect daily (PR #18).
+- ✅ NSE's free daily F&O file loads into `fo_daily` (`tradex.sh fo-history` from 2020; collector adds each day from 19:00 IST).
+- 👉 Next: option metrics (IV, PCR, max pain, strike OI) from `fo_daily` history, then screen them.
 
 ## Code map
 
 - `backend/app/core/market_time.py` – IST sessions, holidays, complete-candle rules (UTC storage).
 - `backend/app/providers/` – adapter interface, `sample.py` (synthetic, `is_sample=TRUE`), `groww.py`.
-- `backend/app/services/` – `ingestion.py` (upserts), `data_quality.py`, `freshness.py`, `collector.py`.
+- `backend/app/services/` – `ingestion.py` (upserts), `data_quality.py`, `freshness.py`, `collector.py`, `nse_bhavcopy.py` (NSE F&O file).
 - `backend/app/api/routes/` – read-only GET endpoints only. A test fails if a non-GET route appears.
 - `backend/alembic/versions/` – schema migrations. Change models → `alembic revision --autogenerate`.
 - `scripts/` – backfill, collector, Telegram helpers, Groww capability check.

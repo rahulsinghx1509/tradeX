@@ -143,6 +143,37 @@ class OptionChainSnapshot(Base):
     is_sample: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class FoDaily(Base):
+    """End-of-day row of one F&O contract from NSE's free daily F&O file (the "bhavcopy").
+
+    Kept for our underlyings only: every future, and options of the nearest expiries within a
+    band around the underlying price that traded or had open interest that day. Units are
+    stored exactly as the file gives them (`file_format` says which file): whether volume
+    and OI are contracts or shares is NOT_VERIFIED for each format.
+    """
+
+    __tablename__ = "fo_daily"
+    __table_args__ = (Index("ix_fo_daily_symbol_date", "symbol", "trade_date"),)
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    symbol: Mapped[str] = mapped_column(String(32))  # underlying, e.g. NIFTY
+    instrument: Mapped[str] = mapped_column(String(3))  # FUT / CE / PE
+    expiry_date: Mapped[date] = mapped_column(Date)
+    strike: Mapped[float | None] = mapped_column(Price)  # NULL for futures
+    open: Mapped[float | None] = mapped_column(Price)
+    high: Mapped[float | None] = mapped_column(Price)
+    low: Mapped[float | None] = mapped_column(Price)
+    close: Mapped[float | None] = mapped_column(Price)
+    settle: Mapped[float | None] = mapped_column(Price)
+    underlying: Mapped[float | None] = mapped_column(Price)  # only in the new (UDiFF) file
+    open_interest: Mapped[int | None] = mapped_column(BigInteger)
+    oi_change: Mapped[int | None] = mapped_column(BigInteger)
+    volume: Mapped[int | None] = mapped_column(BigInteger)
+    lot_size: Mapped[int | None] = mapped_column(Integer)  # only in the new (UDiFF) file
+    file_format: Mapped[str] = mapped_column(String(6))  # udiff / old
+
+
 class IngestionRun(Base):
     """One row per collection job, so failures and freshness can be audited."""
 
