@@ -1,4 +1,4 @@
-"""One-shot screen of every catalog metric that has history (study FS-1.0).
+"""One-shot screen of every catalog metric that has history (study FS-1.1).
 
 Instead of testing metrics one family at a time, this builds one table, with one row per
 instrument per trading day and a column for every metric that can be computed from stored data
@@ -13,13 +13,20 @@ first price a decision made after D's close could get:
 
 How a metric is scored, without being fooled by luck:
 - Information coefficient (IC) = rank (Spearman) correlation between the metric and the target.
-  It is computed separately for every calendar month (all instruments and days of that month
-  together), so neighbouring days that share most of their forward window count only once.
-- t = average monthly IC / its standard error across months; p from the normal distribution.
+- Per-instrument metrics: on each day, the instruments are ranked against each other
+  (cross-sectional IC), then averaged per calendar month. t = average monthly IC / its
+  Newey–West standard error (neighbouring months share forward days); p from the normal curve.
+  FS-1.0 correlated each month's days over time instead; on random prices that move together
+  (as these 12 do) that shows strong false "reversal", so it was replaced before any use.
+- Market-wide metrics (India VIX, days to expiry) are the same for every instrument, so they
+  are tested over time on NIFTY with one observation per month (the month's last day), which
+  keeps the forward windows from overlapping. t from the rank correlation across months.
 - With about 100 metric × target pairs, roughly 5 would pass p < 0.05 by luck alone. So p-values
   are corrected with Benjamini–Hochberg: q is the share of "winners" at that level expected to be
-  false. A metric survives only with q < Q_MAX **and** the same sign in both halves of the
-  development period.
+  false. A metric survives only with q < Q_MAX, |t| at or above a bar calibrated on random
+  prices (MIN_ABS_T_CS / MIN_ABS_T_MARKET) **and** the same sign in both halves of the
+  development period. Each instrument's own average target is taken out before ranking, so a
+  stock that simply drifted up all period cannot make momentum look predictive.
 Only the development period (before VALIDATION_FROM) is used; validation stays held back for one
 final test of at most MAX_FINALISTS survivors combined into one rule.
 """
@@ -40,13 +47,25 @@ from app.services import indicators as ind
 from app.services import oi_study
 from app.services import signal_study as ss
 
-SCREEN_VERSION = "FS-1.0"
+SCREEN_VERSION = "FS-1.1"
 VALIDATION_FROM = date(2025, 4, 1)  # same held-back period as every earlier study
 HORIZONS = (5, 10, 20)
 VOL_WINDOW = 21
 Q_MAX = 0.10
+# Pass bar on |t|, on top of BH. Calibrated on 40 simulated worlds of random prices shaped like
+# these 12 (market correlation ~0.7, VIX-like series moving against the market): the largest
+# |t| among the ~80 cross-section tests passed 4.0 in about 1 world in 20, among the market
+# tests 2.8. Many metrics move together (RSI, EMA distance, DI), so luck arrives in clusters
+# that BH alone lets through.
+MIN_ABS_T_CS = 4.0
+MIN_ABS_T_MARKET = 3.0
 MAX_FINALISTS = 3
 MIN_MONTHS = 12
+MIN_NAMES = 5  # instruments needed on a day to rank them against each other
+MARKET_SYMBOL = "NIFTY"
+# Same value for every instrument on a day, so they cannot be ranked across instruments; tested
+# over time on NIFTY instead, one non-overlapping observation per month.
+MARKET_FEATURES = ("vix", "vix_minus_hv20", "vix_chg_5d", "dte")
 
 # name -> (catalog metric it stands for, short meaning). Order = report order.
 FEATURES: dict[str, tuple[str, str]] = {
@@ -81,7 +100,9 @@ TARGETS = [f"ret_{h}d_fwd" for h in HORIZONS] + ["vol_surprise"]
 # vol_surprise divides by HV20, so metrics built from recent volatility relate to it by
 # construction (volatility mean-reverts). Real, but not an edge without option prices: shown,
 # never a survivor.
-MECHANICAL = {(f, "vol_surprise") for f in ("hv20", "hv_ratio", "atr_pct", "vix_minus_hv20")}
+MECHANICAL = {(f, "vol_surprise") for f in ("hv20", "hv_ratio", "atr_pct", "vix_minus_hv20",
+                                             "corr60_nifty")}
+# corr60_nifty: on random prices it tracks the noise in HV20, so it "predicts" vol_surprise too.
 
 
 # --------------------------------------------------------------------------- loading
@@ -216,35 +237,102 @@ def benjamini_hochberg(p: pd.Series) -> pd.Series:
     return q.reindex(p.index)
 
 
-def monthly_ic(df: pd.DataFrame, feature: str, target: str) -> pd.Series:
-    """Spearman correlation of feature vs target within each calendar month."""
-    d = df[[feature, target]].dropna()
+def daily_cs_ic(df: pd.DataFrame, feature: str, target: str) -> pd.Series:
+    """Cross-sectional IC per day: rank correlation across instruments on the same day.
+
+    Comparing instruments with each other on one day removes the market's common move, which
+    is what makes a within-month comparison over time show reversal on pure random prices.
+    """
+    d = df[["symbol", feature, target]].dropna()
+    d = d[d.groupby(level=0)[feature].transform("size") >= MIN_NAMES]
     if d.empty:
         return pd.Series(dtype=float)
-    month = d.index.to_period("M")
-    out = {}
-    for m, g in d.groupby(month):
-        if len(g) >= 10 and g[feature].nunique() > 1 and g[target].nunique() > 1:
-            out[m] = g[feature].rank().corr(g[target].rank())
-    return pd.Series(out, dtype=float)
+    g = d.groupby(level=0)
+    rf, rt = g[feature].rank(), g[target].rank()
+    rf = rf - rf.groupby(level=0).transform("mean")
+    rt = rt - rt.groupby(level=0).transform("mean")
+    num = (rf * rt).groupby(level=0).sum()
+    den = np.sqrt((rf ** 2).groupby(level=0).sum() * (rt ** 2).groupby(level=0).sum())
+    return (num / den.where(den > 0)).dropna()
+
+
+def monthly_ic(df: pd.DataFrame, feature: str, target: str) -> pd.Series:
+    """Average cross-sectional IC of each calendar month (months with at least 10 days)."""
+    ic = daily_cs_ic(df, feature, target)
+    if ic.empty:
+        return ic
+    g = ic.groupby(ic.index.to_period("M"))
+    return g.mean()[g.size() >= 10]
+
+
+def market_months(df: pd.DataFrame, feature: str, target: str) -> pd.DataFrame:
+    """Market-wide metric (same value for every instrument): NIFTY on each month's last day.
+
+    One observation per month, so a 5–20 day target never overlaps the next one.
+    """
+    d = df[df["symbol"] == MARKET_SYMBOL][[feature, target]].dropna()
+    if d.empty:
+        return d
+    last = d.groupby(d.index.to_period("M")).tail(1)
+    return last.set_index(last.index.to_period("M"))
+
+
+def _spearman(a: pd.Series, b: pd.Series) -> float:
+    return a.rank().corr(b.rank()) if len(a) > 2 else np.nan
+
+
+def _horizon(target: str) -> int:
+    return VOL_WINDOW + 1 if target == "vol_surprise" else int(target.split("_")[1][:-1])
+
+
+def newey_west_t(x: pd.Series, lags: int) -> float:
+    """t-statistic of the mean, allowing neighbouring months to be correlated (overlapping
+    forward windows)."""
+    x = x.to_numpy(dtype=float)
+    n, e = len(x), x - x.mean()
+    var = (e @ e) / n
+    for k in range(1, min(lags, n - 1) + 1):
+        var += 2 * (1 - k / (lags + 1)) * (e[k:] @ e[:-k]) / n
+    return float(x.mean() / math.sqrt(var / n)) if var > 0 else 0.0
 
 
 def screen(dev: pd.DataFrame) -> pd.DataFrame:
     rows = []
+    # Cross-section: take out each instrument's own average target over the period. Otherwise a
+    # stock that happened to drift up all along (random luck over a few years) makes momentum
+    # look predictive in every month, though nobody could know the drift in advance.
+    cs = dev.copy()
+    for tgt in TARGETS:
+        cs[tgt] = dev[tgt] - dev.groupby("symbol")[tgt].transform("mean")
     for feat in FEATURES:
         for tgt in TARGETS:
-            ic = monthly_ic(dev, feat, tgt)
+            if feat in MARKET_FEATURES:
+                m = market_months(dev, feat, tgt)
+                n = len(m)
+                if n < MIN_MONTHS:
+                    rows.append({"feature": feat, "target": tgt, "test": "market", "months": n})
+                    continue
+                r = _spearman(m[feat], m[tgt])
+                tstat = r * math.sqrt((n - 2) / max(1 - r * r, 1e-12)) if pd.notna(r) else 0.0
+                half = n // 2
+                rows.append({"feature": feat, "target": tgt, "test": "market", "months": n,
+                             "ic": r, "t": tstat, "p": _p_two_sided(tstat),
+                             "ic_1st_half": _spearman(m[feat].iloc[:half], m[tgt].iloc[:half]),
+                             "ic_2nd_half": _spearman(m[feat].iloc[half:], m[tgt].iloc[half:]),
+                             "years_same_sign": np.nan})
+                continue
+            ic = monthly_ic(cs, feat, tgt)
             n = len(ic)
             if n < MIN_MONTHS:
-                rows.append({"feature": feat, "target": tgt, "months": n})
+                rows.append({"feature": feat, "target": tgt, "test": "cross-section", "months": n})
                 continue
-            mean, sd = ic.mean(), ic.std(ddof=1)
-            tstat = mean / (sd / math.sqrt(n)) if sd > 0 else 0.0
+            mean = ic.mean()
+            tstat = newey_west_t(ic, math.ceil(_horizon(tgt) / 21))
             half = n // 2
             yearly = ic.groupby(ic.index.year).mean()
-            rows.append({"feature": feat, "target": tgt, "months": n, "ic": mean, "t": tstat,
-                         "p": _p_two_sided(tstat), "ic_1st_half": ic.iloc[:half].mean(),
-                         "ic_2nd_half": ic.iloc[half:].mean(),
+            rows.append({"feature": feat, "target": tgt, "test": "cross-section", "months": n,
+                         "ic": mean, "t": tstat, "p": _p_two_sided(tstat),
+                         "ic_1st_half": ic.iloc[:half].mean(), "ic_2nd_half": ic.iloc[half:].mean(),
                          "years_same_sign": float((np.sign(yearly) == np.sign(mean)).mean())})
     res = pd.DataFrame(rows)
     if "p" in res:
@@ -252,7 +340,9 @@ def screen(dev: pd.DataFrame) -> pd.DataFrame:
         same = np.sign(res["ic_1st_half"]) == np.sign(res["ic_2nd_half"])
         mech = [(f, t) in MECHANICAL for f, t in zip(res["feature"], res["target"], strict=True)]
         res["mechanical"] = mech
-        res["survives"] = (res["q"] < Q_MAX) & same & ~res["mechanical"]
+        bar = np.where(res["test"] == "market", MIN_ABS_T_MARKET, MIN_ABS_T_CS)
+        res["survives"] = ((res["q"] < Q_MAX) & (res["t"].abs() >= bar) & same
+                           & ~res["mechanical"])
     else:
         res["q"], res["mechanical"], res["survives"] = np.nan, False, False
     return res
@@ -263,8 +353,12 @@ def to_markdown(dev: pd.DataFrame, res: pd.DataFrame, coverage: dict, generated:
     f = ss._fmt
     lines = [f"# One-shot metric screen {SCREEN_VERSION} (development period only)", "",
              f"Generated {generated}. {len(FEATURES)} metrics × {len(TARGETS)} targets = "
-             f"{len(FEATURES) * len(TARGETS)} tests, scored by monthly rank correlation (IC) and "
-             f"corrected for testing many at once (Benjamini–Hochberg, q < {Q_MAX:g}). "
+             f"{len(FEATURES) * len(TARGETS)} tests. Per-instrument metrics: the instruments are "
+             "ranked against each other on each day (rank correlation, IC), averaged per month. "
+             "Market-wide metrics (India VIX, days to expiry): NIFTY, one day per month. "
+             f"Corrected for testing many at once (Benjamini–Hochberg, q < {Q_MAX:g}) and a |t| "
+             f"bar set on random prices ({MIN_ABS_T_CS:g} across instruments, "
+             f"{MIN_ABS_T_MARKET:g} for market-wide). "
              f"Development: before {VALIDATION_FROM}; validation is held back. "
              "**Underlying only: no options, costs or slippage.**", "",
              "## Data used", "", "| Instrument | Days | First | Last | With futures data | With VIX |",
@@ -276,17 +370,19 @@ def to_markdown(dev: pd.DataFrame, res: pd.DataFrame, coverage: dict, generated:
                                   f"(at least {MIN_MONTHS} needed)."])
     surv = res[res["survives"]].sort_values("q")
     lines += ["", f"## 1. Survivors ({len(surv)})", "",
-              "A survivor passed the luck correction and had the same sign in both halves. "
+              "A survivor passed the luck correction and the |t| bar and had the same sign in "
+              "both halves. "
               f"At most {MAX_FINALISTS} go forward, combined into one rule with its pass bar "
               "written down before the one final test.", ""]
     if surv.empty:
         lines.append("**None.** No metric's link to what came next is strong enough to rule out "
                      "luck once all tests are counted.")
     else:
-        lines += ["| Metric | Target | IC | t | q | 1st half | 2nd half | Years same sign |",
-                  "|---|---|---|---|---|---|---|---|"]
+        lines += ["| Metric | Target | Test | IC | t | q | 1st half | 2nd half | Years same sign |",
+                  "|---|---|---|---|---|---|---|---|---|"]
         for r in surv.itertuples():
-            lines.append(f"| {r.feature} | {r.target} | {f(r.ic, 3)} | {f(r.t, 1)} | {f(r.q, 3)} | "
+            lines.append(f"| {r.feature} | {r.target} | {r.test} | {f(r.ic, 3)} | {f(r.t, 1)} | "
+                         f"{f(r.q, 3)} | "
                          f"{f(r.ic_1st_half, 3)} | {f(r.ic_2nd_half, 3)} | "
                          f"{f(r.years_same_sign * 100, 0)}% |")
     lines += ["", "## 2. Every metric (IC by target; * = survivor, m = linked by construction)", "",
@@ -309,12 +405,19 @@ def to_markdown(dev: pd.DataFrame, res: pd.DataFrame, coverage: dict, generated:
     lines += ["", "## Notes", "",
               f"- Rows used: {len(dev)} instrument-days. Each month counts once per test, so the "
               "real sample is the number of months, not days.",
+              "- Ranking instruments against each other asks \"which of the 12 to favour\", not "
+              "\"is the market going up\". The market-wide test asks the second question with "
+              "about 60 monthly points, so only a strong link can pass.",
+              "- FS-1.0 compared each month's days over time instead. Random prices that move "
+              "together, as these 12 do, then show strong false reversal (IC about −0.2, t about "
+              "−9), which is what its 50 survivors were. FS-1.1 replaces it.",
               "- Not in this screen: the option-chain metrics (IV, IV rank, PCR, Greeks, skew, "
               "max pain, strike OI, bid/ask), which have no history yet; and metrics that need a "
               "data source outside Groww (FII/DII, GIFT Nifty, global markets, events, ban list).",
-              "- m: volatility surprise is measured against HV20, so HV20, HV ratio, ATR % and "
-              "VIX minus HV20 relate to it by construction (volatility mean-reverts). True, but "
-              "only useful with option prices, so these are never survivors.",
+              "- m: volatility surprise is measured against HV20, so HV20, HV ratio, ATR %, "
+              "VIX minus HV20 and correlation with NIFTY relate to it by construction "
+              "(volatility mean-reverts). True, but only useful with option prices, so these "
+              "are never survivors.",
               "- Mispricing uses carry (annualised basis) without a risk-free rate series; a "
               "near-constant rate shifts every day equally, so the ranking is unaffected.", ""]
     return "\n".join(lines)

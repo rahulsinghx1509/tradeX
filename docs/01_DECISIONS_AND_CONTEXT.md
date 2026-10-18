@@ -206,3 +206,15 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   a single final test on the held-back data. If none survive, the price/derivatives history on
   these 12 has no usable daily edge, and the next evidence comes from the option chains being
   collected.
+- **FS-1.0 result was a scoring bias, not a signal.** RK's first run showed 50 survivors (RSI,
+  EMA distance, DI, weekly trend "reversing", t up to −8). The same screen on simulated random
+  prices that move together like these 12 gave the same picture (IC about −0.2, t about −9):
+  correlating each month's days over time shows false reversal when everything moves together.
+  FS-1.1 replaces the scoring before any rule was built on it:
+  - per-instrument metrics: instruments ranked against each other on each day (cross-sectional
+    IC), each instrument's own average target taken out first (a stock that drifted up all
+    period cannot make momentum look predictive), Newey–West t across months;
+  - market-wide metrics (India VIX, VIX minus HV20, VIX change, days to expiry): NIFTY, one
+    non-overlapping observation per month;
+  - pass bar |t| >= 4.0 (cross-section) / 3.0 (market) on top of BH, calibrated on 40 simulated
+    random-price worlds so a false survivor appears in about 1 world in 20.

@@ -51,20 +51,60 @@ def test_benjamini_hochberg_matches_hand_calculation():
     assert np.allclose(q[["a", "c", "b", "d"]], [0.04, 0.04 * 4 / 3, 0.04 * 4 / 3, 0.20])
 
 
-def test_screen_finds_a_planted_signal_and_not_noise():
+def _noise_panel(seed, n_sym=12):
     days = pd.bdate_range("2019-01-01", "2024-12-31")
-    rng = np.random.default_rng(3)
-    dev = pd.DataFrame({f: rng.normal(size=len(days)) for f in fs.FEATURES}, index=days)
-    for tgt in fs.TARGETS:
-        dev[tgt] = rng.normal(size=len(days))
-    dev["ret_10d_fwd"] = dev["rsi14"] + rng.normal(size=len(days))  # planted
+    rng = np.random.default_rng(seed)
+    parts = []
+    for i in range(n_sym):
+        g = pd.DataFrame({c: rng.normal(size=len(days)) for c in [*fs.FEATURES, *fs.TARGETS]},
+                         index=days)
+        g.insert(0, "symbol", "NIFTY" if i == 0 else f"S{i}")
+        parts.append(g)
+    return pd.concat(parts), rng
+
+
+def test_screen_finds_a_planted_cross_sectional_signal():
+    dev, rng = _noise_panel(3)
+    dev["ret_10d_fwd"] = 0.3 * dev["rsi14"] + rng.normal(size=len(dev))  # planted
     res = fs.screen(dev)
     surv = res[res["survives"]]
     assert ("rsi14", "ret_10d_fwd") in set(zip(surv["feature"], surv["target"], strict=True))
-    assert len(surv) <= 5  # pure noise elsewhere rarely survives the correction
+    assert len(surv) <= 2
     report = fs.to_markdown(dev, res, {"X": {"days": 1, "first": "a", "last": "b", "fut": 0,
                                              "vix": 0}}, "now")
     assert "Survivors" in report and "rsi14" in report
+
+
+def test_market_metric_is_tested_once_a_month_on_nifty():
+    dev, rng = _noise_panel(5)
+    vix = pd.Series(rng.normal(size=dev.index.nunique()), index=dev.index.unique())
+    dev["vix"] = vix.reindex(dev.index).to_numpy()  # same value for every instrument
+    nifty = dev["symbol"] == "NIFTY"
+    dev.loc[nifty, "ret_20d_fwd"] = dev.loc[nifty, "vix"] + 0.5 * rng.normal(size=nifty.sum())
+    res = fs.screen(dev).set_index(["feature", "target"])
+    row = res.loc[("vix", "ret_20d_fwd")]
+    assert row["test"] == "market" and row["months"] == 72 and row["survives"]
+
+
+def test_common_market_moves_do_not_look_like_reversal():
+    """Regression for FS-1.0: random prices moving together showed IC about -0.2, t about -9."""
+    days = pd.bdate_range("2020-03-24", "2025-03-31")
+    rng = np.random.default_rng(0)
+    mkt = rng.normal(size=len(days))
+    tables = []
+    for i in range(12):
+        c = 100 * np.exp(np.cumsum(0.012 * mkt + rng.normal(0, 0.008, len(days))))
+        spot = pd.DataFrame({"high": c * 1.007, "low": c * 0.993, "close": c}, index=days)
+        tables.append(fs.build_table(f"S{i}", spot, pd.DataFrame(), None, None))
+    res = fs.screen(fs.dev_only(pd.concat(tables))).set_index(["feature", "target"])
+    assert not res["survives"].any()
+    assert abs(res.loc[("rsi14", "ret_10d_fwd"), "t"]) < 3
+
+
+def test_newey_west_without_lags_is_the_plain_t():
+    x = pd.Series(np.random.default_rng(1).normal(0.1, 1, 200))
+    plain = x.mean() / (x.std(ddof=0) / np.sqrt(len(x)))
+    assert np.isclose(fs.newey_west_t(x, 0), plain)
 
 
 def test_too_little_history_gives_a_clear_report():
@@ -95,11 +135,8 @@ def test_futures_features_use_the_nearest_unexpired_contract():
 
 
 def test_mechanical_volatility_links_never_survive():
-    days = pd.bdate_range("2019-01-01", "2024-12-31")
-    rng = np.random.default_rng(4)
-    dev = pd.DataFrame({f: rng.normal(size=len(days)) for f in [*fs.FEATURES, *fs.TARGETS]},
-                       index=days)
-    dev["vol_surprise"] = -dev["hv20"] + rng.normal(size=len(days))
+    dev, rng = _noise_panel(4)
+    dev["vol_surprise"] = -dev["hv20"] + rng.normal(size=len(dev))
     res = fs.screen(dev).set_index(["feature", "target"])
     assert res.loc[("hv20", "vol_surprise"), "q"] < 0.01
     assert not res.loc[("hv20", "vol_surprise"), "survives"]
