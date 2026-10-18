@@ -186,6 +186,7 @@ The dashboard banner disappears once only real data is shown.
 | Command | What it does |
 |---|---|
 | `~/tradex/deploy/tradex.sh status` | What's running |
+| `~/tradex/deploy/tradex.sh study` | Backtest the four core readings; report in `~/tradex/reports/signal_study.md` |
 | `~/tradex/deploy/tradex.sh logs collector` | Live collector log (Ctrl+C to leave) |
 | `~/tradex/deploy/tradex.sh restart collector` | Restart one part |
 | `~/tradex/deploy/tradex.sh stop` / `start` | Stop / start everything (data is kept) |
