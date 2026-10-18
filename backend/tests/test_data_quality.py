@@ -40,8 +40,8 @@ def test_missing_volume_is_not_an_ohlc_error():
 
 
 def test_dedupe_exact_and_conflicting():
-    rows, res = dq.dedupe([c(T0), c(T0)])
-    assert len(rows) == 1 and res.status == dq.WARN
+    rows, res = dq.dedupe([c(T0), c(T0)])  # exact repeat: merged and counted, nothing wrong
+    assert len(rows) == 1 and res.status == dq.PASS and res.details["exact_duplicates"] == 1
     rows, res = dq.dedupe([c(T0), c(T0, cl=100.7)])
     assert len(rows) == 1 and res.status == dq.FAIL
     assert rows[0].close == 100.7  # last copy wins, and the conflict is logged
@@ -88,3 +88,27 @@ def test_gaps_follow_nifty_reference_days():
     res = dq.check_gaps([c(day1), c(day3)], "1d", frozenset(),
                         reference_times=[day1, holiday, day3])
     assert res.status == dq.WARN and res.details["missing"] == 1
+
+
+def test_old_problems_are_logged_but_do_not_warn():
+    old, new = T0 - timedelta(days=400), T0
+    recent_from = new - timedelta(days=dq.RECENT_DAYS)
+    candles = [c(old, h=99.5, o=None, v=None), c(new)]
+    _, res = dq.validate_ohlc(candles, recent_from=recent_from)
+    assert res.status == dq.PASS and res.details["invalid"] == 1
+    res = dq.check_missing_open(candles, recent_from=recent_from)
+    assert res.status == dq.PASS and res.details["missing_open"] == 1
+    res = dq.check_missing_values(candles, True, False, recent_from=recent_from)
+    assert res.status == dq.PASS and res.details["missing_volume"] == 1
+    # The same problems on a recent candle still warn.
+    recent = [c(new - timedelta(days=1), h=99.5, o=None, v=None), c(new)]
+    assert dq.validate_ohlc(recent, recent_from=recent_from)[1].status == dq.WARN
+    assert dq.check_missing_open(recent, recent_from=recent_from).status == dq.WARN
+    assert dq.check_missing_values(recent, True, False, recent_from=recent_from).status == dq.WARN
+
+
+def test_old_gap_is_logged_but_does_not_warn():
+    day1, day2, day3 = T0 - timedelta(days=400), T0 - timedelta(days=399), T0
+    res = dq.check_gaps([c(day1), c(day3)], "1d", frozenset(), reference_times=[day1, day2, day3],
+                        recent_from=day3 - timedelta(days=dq.RECENT_DAYS))
+    assert res.status == dq.PASS and res.details["missing"] == 1

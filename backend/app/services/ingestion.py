@@ -129,13 +129,18 @@ def ingest_candles(session: Session, provider: MarketDataProvider, instrument: I
     candles, c1 = dq.drop_incomplete(raw, timeframe, now)
     candles, c2 = dq.dedupe(candles)
     candles, filled = _fill_daily_open(session, instrument, timeframe, candles)
-    problems, c3 = dq.validate_ohlc(candles, spike_check=instrument.instrument_type != "OPTION")
+    # Older problems are logged but don't raise a WARN (see dq.RECENT_DAYS).
+    recent_from = candles[-1].time - timedelta(days=dq.RECENT_DAYS) if candles else None
+    problems, c3 = dq.validate_ohlc(candles, spike_check=instrument.instrument_type != "OPTION",
+                                    recent_from=recent_from)
     is_fno = instrument.segment == "FNO"
     expect_volume = is_fno or instrument.instrument_type == "STOCK"
-    c4 = dq.check_missing_values(candles, expect_volume=expect_volume, expect_oi=is_fno)
+    c4 = dq.check_missing_values(candles, expect_volume=expect_volume, expect_oi=is_fno,
+                                 recent_from=recent_from)
     c5 = dq.check_gaps(candles, timeframe,
-                       reference_times=_reference_times(session, instrument, timeframe, candles))
-    c6 = dq.check_missing_open(candles, filled)
+                       reference_times=_reference_times(session, instrument, timeframe, candles),
+                       recent_from=recent_from)
+    c6 = dq.check_missing_open(candles, filled, recent_from=recent_from)
     checks = [dq.CheckResult("source_availability", dq.PASS, {"received": len(raw)}),
               c1, c2, c3, c4, c5, c6]
 
