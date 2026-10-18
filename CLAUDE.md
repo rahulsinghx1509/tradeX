@@ -32,7 +32,10 @@ Read these before doing any work:
   market-hours collector. Tested with SAMPLE data only. Groww adapter written from docs, `NOT_VERIFIED`.
 - ✅ Hosting chosen: AWS Lightsail Mumbai ($7 / 1 GB to start), everything in Docker Compose (`deploy/`), guide in `docs/05_CLOUD_SERVER_SETUP.md`.
 - ✅ Milestone 2 core metrics (EMA, ADX, RSI, ATR, relative strength, D1–D4 readings) on each dashboard card. Not signals.
-- 👉 Next: backtest the D1–D4 rules before any LONG/SHORT signal.
+- ✅ Studies (docs/01 §11–15): no daily or hourly price-direction edge found on the 12 instruments.
+- ✅ VJ-1.0 VIX-jump volatility warning passed its one-time final test: dashboard banner + Telegram
+  alert, option selling NO TRADE on jump days. The only tested rule; not a buy/sell signal.
+- 👉 Next: option-chain history builds daily (PR #18); revisit volatility rules with real option prices.
 
 ## Code map
 

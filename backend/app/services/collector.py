@@ -4,8 +4,9 @@ During market hours (09:15-15:30 IST, Mon-Fri) it wakes up every few minutes and
   1. stores a quote snapshot for each tracked instrument,
   2. tops up the latest 1-hour candles,
   3. once a day from 15:15 IST, stores the option chains (see services/option_chain.py).
-After the close it loads the day's daily candle once, and sends a heartbeat
-message so you know it is alive. Outside market hours it sleeps.
+After the close it loads the day's daily candle once (and India VIX's), checks the VIX-jump
+volatility warning (VJ-1.0, see services/vix_warning.py) and sends one alert when a jump starts,
+then sends a heartbeat message so you know it is alive. Outside market hours it sleeps.
 
 This is where the rule engine plugs in later: after each cycle, run the
 (backtested) rules on fresh data and send ENTER / EXIT alerts through the notifier.
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session
 from app.core.market_time import SESSION_CLOSE, is_market_open, is_trading_day, to_ist
 from app.db.models import Instrument
 from app.providers.base import MarketDataProvider
-from app.services import option_chain
+from app.services import option_chain, vix_warning
 from app.services.ingestion import ingest_snapshot, refresh_recent
 
 log = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ class CollectorState:
     eod_done_for: str | None = None
     chain_done_for: str | None = None
     open_heartbeat_for: str | None = None
+    vix_alert_for: str | None = None  # the VIX close date a warning was already sent for
     failures: list[str] = field(default_factory=list)
 
 
@@ -76,7 +78,15 @@ def run_cycle(session: Session, provider: MarketDataProvider, notifier, state: C
         results = refresh_recent(session, provider, "1h", now) + \
             refresh_recent(session, provider, "1d", now)
         bad = sum(r.status != "SUCCESS" for r in results)
-        notifier.send(f"TradeX end of day {today}: {len(results) - bad} loads ok, {bad} failed.")
+        vix_load = vix_warning.refresh(session, provider, now)
+        warning = vix_warning.current(session, provider.name, now)
+        vix_note = ("" if vix_load.status == "SUCCESS" else " India VIX load failed.")
+        notifier.send(f"TradeX end of day {today}: {len(results) - bad} loads ok, {bad} failed."
+                      f"{vix_note} Volatility warning: {warning.status}.")
+        if (warning.status == "WARNING" and warning.started_today
+                and state.vix_alert_for != warning.as_of):
+            notifier.send(vix_warning.alert_text(warning))
+            state.vix_alert_for = warning.as_of
         state.eod_done_for = today
         return "end_of_day"
     return "idle"

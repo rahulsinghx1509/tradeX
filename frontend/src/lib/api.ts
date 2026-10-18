@@ -64,6 +64,17 @@ export interface HourlyMetrics {
   notes: string[];
 }
 
+export interface VixWarning {
+  version: string;
+  status: "WARNING" | "CLEAR" | "NO_DATA";
+  as_of: string | null;
+  vix: number | null;
+  change_5d_pct: number | null;
+  jump_pct: number;
+  started_today: boolean;
+  message: string;
+}
+
 export interface Overview {
   generated_at: string;
   market_open: boolean;
@@ -71,6 +82,7 @@ export interface Overview {
   contains_sample_data: boolean;
   metrics_version: string;
   hourly_version?: string;
+  vix_warning?: VixWarning;
   signal: { status: string; message: string };
   underlyings: {
     symbol: string;

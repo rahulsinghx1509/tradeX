@@ -230,3 +230,15 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   volatility surprise after jumps above other days by >= 0.10 (log), >= 55% of jump days followed
   by a month above HV20, and a positive month-end rank correlation. If it passes, its only use is
   a NO TRADE filter for option selling. If it fails, it is dropped, not re-tuned.
+- **Final test PASSED (2026-10-18), the first rule to pass.** Held back (2025-04-01 to
+  2026-09-15, 360 NIFTY days): 64 jump days in 9 episodes; volatility surprise after jumps minus
+  other days +0.27 (development +0.12); 58% of jump days followed by a month above HV20
+  (development 59%); month-end rank correlation +0.32 over 18 months. Threshold: 5-day VIX rise
+  above 7.8%.
+- RK chose "Dashboard + Telegram". Rule **VJ-1.0** (`backend/app/services/vix_warning.py`):
+  WARNING when India VIX's latest complete close is more than 7.8% above its close 5 trading
+  days earlier, which means option selling is NO TRADE. Missing or stale VIX (more than one trading
+  day behind) gives NO_DATA, which is also NO TRADE for option selling. The dashboard shows a banner, and the
+  collector loads VIX after the close and sends one Telegram alert on the first day of each
+  jump. Not a buy/sell signal; no orders. Changing the threshold means a new version and a new
+  test.
