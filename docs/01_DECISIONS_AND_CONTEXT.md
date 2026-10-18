@@ -242,3 +242,22 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   collector loads VIX after the close and sends one Telegram alert on the first day of each
   jump. Not a buy/sell signal; no orders. Changing the threshold means a new version and a new
   test.
+
+## 16. Option history from NSE's free F&O file, and the option screen (2026-10-18)
+
+- RK asked for every catalog metric's data. `docs/07_DATA_SOURCES.md` maps them. The server can
+  download NSE's archive files (checked with `tradex.sh sources`); NSE's home page answers 403,
+  but the archive works. FRED timed out (retry later).
+- NSE's daily F&O file is loaded into `fo_daily` from 2020 (`tradex.sh fo-history`, 1,679 days,
+  0 failures) and the collector adds each day from 19:00 IST. Kept: every future, and options of
+  the nearest 2 expiries plus 2 monthly expiries within ±15% of the price that traded or had OI.
+- Option metrics (`tradex.sh option-metrics`) on the nearest monthly expiry with 7+ days left.
+  Checks passed on the server: NIFTY ATM IV vs India VIX correlation 0.97 (IV 1.4 points below
+  VIX, as expected); OI is in shares in both the old and new file (ratios 0.75–1.18), so OI
+  history is comparable across NSE's July 2024 switch.
+- Option screen OS-1.0 (`tradex.sh option-screen`): FS-1.1's rules, plus target rv_vs_iv
+  (next month's realised volatility vs today's ATM IV). Run on random worlds first: IV-based
+  metrics "predicted" both volatility targets on pure noise (|t| 15–30: IV knows today's
+  volatility better than HV20, and its measurement noise reverts), so those pairs are marked
+  mechanical. Market-wide bar raised from 3.0 to 3.3 (25 market tests here, not 16), giving a
+  false survivor in about 1 random world in 20. Bars fixed before the real run.
