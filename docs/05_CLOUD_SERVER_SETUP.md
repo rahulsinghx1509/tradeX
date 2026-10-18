@@ -190,6 +190,8 @@ The dashboard banner disappears once only real data is shown.
 | `~/tradex/deploy/tradex.sh variants` | Compare long-only variants on the development years; report in `~/tradex/reports/long_variants.md` |
 | `~/tradex/deploy/tradex.sh final` | One-time final test of the trailing-stop rules on the held-back years; report in `~/tradex/reports/final_test.md` |
 | `~/tradex/deploy/tradex.sh probe` | Check how far back Groww keeps futures and options history with open interest; report in `~/tradex/reports/derivatives_probe.md` |
+| `~/tradex/deploy/tradex.sh futures-history` | Load daily candles and open interest of every expired monthly future since 2020 (20–40 minutes; safe to stop and re-run) |
+| `~/tradex/deploy/tradex.sh oi-study` | Open-interest study on the development years (needs `futures-history` first); report in `~/tradex/reports/oi_study.md` |
 | `~/tradex/deploy/tradex.sh logs collector` | Live collector log (Ctrl+C to leave) |
 | `~/tradex/deploy/tradex.sh restart collector` | Restart one part |
 | `~/tradex/deploy/tradex.sh stop` / `start` | Stop / start everything (data is kept) |
