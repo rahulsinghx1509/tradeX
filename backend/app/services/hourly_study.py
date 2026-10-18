@@ -215,3 +215,82 @@ def to_markdown(tr: pd.DataFrame, info: dict, generated: str) -> str:
               "- A variant worth a final test beats A in both halves, in most years and on most "
               "instruments, with enough trades. A big total from a few trades is luck.", ""]
     return "\n".join(lines)
+
+
+# Final test (spec §12). Proposed to the owner on 2026-10-18 *before* any validation result of
+# variant D was seen. Run once; do not change these numbers after looking at the result.
+FINAL_VARIANT = "D"
+FINAL_BAR = {"min_trades": 100, "min_expectancy_r": 0.10, "min_profit_factor": 1.2,
+             "max_symbol_share": 0.5}
+
+
+def final_test(daily: dict[str, pd.DataFrame], hourly: dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, dict]:
+    """Variants D and A on the validation period only: closed trades entered on or after the cut."""
+    keep = [v for v in VARIANTS if v.key in (FINAL_VARIANT, "A")]
+    parts = []
+    for sym, hf in hourly.items():
+        if hf.empty or sym not in daily or daily[sym].empty:
+            continue
+        h = prepare(daily[sym], hf)
+        parts += [trades(sym, h, v) for v in keep]
+    parts = [p for p in parts if len(p)]
+    tr = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+    if len(tr):
+        tr = tr[tr["entry_time"] >= pd.Timestamp(VALIDATION_FROM)].sort_values(["variant", "entry_time"])
+    closed = tr[tr["exit_reason"] != "OPEN"] if len(tr) else tr
+    d = closed[closed["variant"] == FINAL_VARIANT] if len(closed) else closed
+    a = closed[closed["variant"] == "A"] if len(closed) else closed
+    summary = ss.trade_summary(d["r"]) if len(d) else {"trades": 0}
+    base = ss.trade_summary(a["r"]) if len(a) else {"trades": 0}
+    by_symbol = d.groupby("symbol")["r"].sum() if len(d) else pd.Series(dtype=float)
+    total = summary.get("total_r")
+    share = (by_symbol.max() / total) if total and total > 0 else None
+    b = FINAL_BAR
+    checks = {
+        f"At least {b['min_trades']} closed trades": summary["trades"] >= b["min_trades"],
+        f"Expectancy at least +{b['min_expectancy_r']}R":
+            (summary.get("expectancy_r") or -9) >= b["min_expectancy_r"],
+        f"Profit factor at least {b['min_profit_factor']}":
+            (summary.get("profit_factor") or 0) >= b["min_profit_factor"],
+        "Beats A (daily trend only) on the same period":
+            summary.get("expectancy_r") is not None and base.get("expectancy_r") is not None
+            and summary["expectancy_r"] > base["expectancy_r"],
+        f"No instrument above {b['max_symbol_share']:.0%} of total R":
+            share is not None and share <= b["max_symbol_share"],
+    }
+    return tr, {"summary": summary, "baseline": base, "by_symbol": by_symbol, "share": share,
+                "checks": checks, "passed": all(checks.values()),
+                "open": int(((tr["exit_reason"] == "OPEN") & (tr["variant"] == FINAL_VARIANT)).sum())
+                if len(tr) else 0}
+
+
+def final_markdown(tr: pd.DataFrame, info: dict, generated: str) -> str:
+    """The one-time final test report: the pre-agreed bar, the result and the verdict."""
+    f = ss._fmt
+    verdict = "PASSED" if info["passed"] else "FAILED"
+    lines = [f"# Final test {HOURLY_STUDY_VERSION}: variant {FINAL_VARIANT} (daily trend + hourly "
+             "breakout) on held-back data", "",
+             f"Generated {generated}. Validation period: {VALIDATION_FROM} onwards. Underlying "
+             "hourly candles only; **no options, costs or slippage**.", "",
+             f"## Verdict: **{verdict}**", "", "| Pre-agreed check | Result |", "|---|---|"]
+    lines += [f"| {name} | {'pass' if ok else 'FAIL'} |" for name, ok in info["checks"].items()]
+    lines += ["", "| Variant | Trades | Win % | Expectancy (R) | Profit factor | "
+              "Longest losing streak | Total R |", "|---|---|---|---|---|---|---|"]
+    for key, s in ((FINAL_VARIANT, info["summary"]), ("A", info["baseline"])):
+        if s["trades"]:
+            lines.append(f"| {key} | {s['trades']} | {f(s['win_pct'], 0)} | {f(s['expectancy_r'])} | "
+                         f"{f(s['profit_factor'])} | {s['max_losing_streak']} | {f(s['total_r'], 1)} |")
+        else:
+            lines.append(f"| {key} | 0 | – | – | – | – | – |")
+    share = info["share"]
+    lines += ["", f"Biggest instrument share of D's total R: "
+              f"{f(share * 100 if share is not None else None, 0, '%')}. "
+              f"D trades still open: {info['open']}."]
+    if len(info["by_symbol"]):
+        closed = tr[(tr["exit_reason"] != "OPEN") & (tr["variant"] == FINAL_VARIANT)]
+        lines += ["", "| Instrument | Trades | Total R |", "|---|---|---|"]
+        for sym, total in info["by_symbol"].sort_values(ascending=False).items():
+            lines.append(f"| {sym} | {int((closed['symbol'] == sym).sum())} | {f(total, 1)} |")
+    lines += ["", "This test is run once. If it failed, the rules are not changed and re-tested on "
+              "the same data; that would be fitting to luck.", ""]
+    return "\n".join(lines)

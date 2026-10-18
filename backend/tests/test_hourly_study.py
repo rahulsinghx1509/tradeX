@@ -69,3 +69,15 @@ def test_no_hourly_history_gives_a_clear_report():
     tr, info = hs.run({"NIFTY": _daily(pd.bdate_range("2024-01-01", periods=5), np.ones(5))},
                       {"NIFTY": pd.DataFrame(columns=["high", "low", "close"])})
     assert tr.empty and "backfill --timeframes 1h" in hs.to_markdown(tr, info, "now")
+
+
+def test_final_test_uses_validation_only_and_reports_verdict():
+    days = pd.bdate_range("2024-06-03", "2025-12-31")
+    close = 100 + np.cumsum(np.sin(np.arange(len(days)) / 5) + 0.3)
+    tr, info = hs.final_test({"NIFTY": _daily(days, close)}, {"NIFTY": _hourly(days, close)})
+    assert len(tr) and (tr["entry_time"] >= pd.Timestamp(hs.VALIDATION_FROM)).all()
+    assert set(tr["variant"]) <= {"A", "D"} and len(info["checks"]) == 5
+    report = hs.final_markdown(tr, info, "now")
+    assert ("PASSED" in report) != ("FAILED" in report)
+    assert hs.FINAL_BAR == {"min_trades": 100, "min_expectancy_r": 0.10,
+                            "min_profit_factor": 1.2, "max_symbol_share": 0.5}
