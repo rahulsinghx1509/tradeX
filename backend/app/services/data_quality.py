@@ -41,9 +41,9 @@ class CheckResult:
 def ohlc_problem(c: Candle, spike_check: bool = True) -> str | None:
     """Why a candle is invalid, or None if it is fine.
 
-    A missing OPEN alone does not make a candle invalid: Groww often sends stock daily candles
-    without one, and high / low / close are still real. The open stays missing (never guessed);
-    check_missing_open reports it.
+    A missing OPEN alone does not make a candle invalid: Groww sends stock and stock-futures
+    candles that start at 09:15 without one, and high / low / close are still real. The open
+    stays missing (never guessed); check_missing_open reports it.
     """
     if any(p is None for p in (c.high, c.low, c.close)):
         return "MISSING_PRICE"
@@ -67,13 +67,19 @@ def _is_recent(t: datetime, recent_from: datetime | None) -> bool:
 
 def check_missing_open(candles: list[Candle], filled_from_1h: int = 0,
                        recent_from: datetime | None = None) -> CheckResult:
-    """Candles stored without an open price. `filled_from_1h` were completed from 1h data.
-    WARN only when a recent candle lacks its open."""
+    """Candles stored without an open price. Always PASS, with the counts logged.
+
+    Groww does not send the 09:15 opening price for stocks and stock futures: the daily candle
+    and the first 1h candle both arrive without it (seen on the server, 2026-10-18). This is a
+    permanent provider gap, not bad data, and no metric or rule uses the open, so it must not
+    keep the badge on WARN. `filled_from_1h` counts opens completed from a stored 1h candle.
+    """
     missing = [c.time for c in candles if c.open is None]
     recent = sum(1 for t in missing if _is_recent(t, recent_from))
-    return CheckResult("missing_open", WARN if recent else PASS,
+    return CheckResult("missing_open", PASS,
                        {"missing_open": len(missing), "missing_open_recent": recent,
-                        "open_filled_from_1h": filled_from_1h})
+                        "open_filled_from_1h": filled_from_1h,
+                        "note": "Groww sends no 09:15 open for stocks; not used by any metric"})
 
 
 def drop_incomplete(candles: list[Candle], timeframe: str, now: datetime) -> tuple[list[Candle], CheckResult]:
