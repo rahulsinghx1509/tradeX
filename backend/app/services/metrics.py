@@ -5,6 +5,8 @@ for indices, cash price for stocks), as the strategy spec (§5) requires. Nothin
 signal: the four direction readings are shown for information, and signals come only after the
 rules are backtested.
 
+The hourly readings at the end of this file (H1-H3) do the same on completed 1-hour candles.
+
 A metric that cannot be computed is returned as None together with a reason, never as 0.
 """
 
@@ -157,3 +159,79 @@ def compute_for_instruments(session: Session, instruments: list[Instrument],
     nifty = next((i for i in instruments if i.symbol == "NIFTY" and i.instrument_type == "INDEX"), None)
     reference = frames.get(nifty.id) if nifty else None
     return {i.id: compute(frames[i.id], now, None if i is nifty else reference) for i in instruments}
+
+
+# --------------------------------------------------------------------------- hourly readings
+# Live chart reading: the same ideas on the underlying's completed 1-hour candles, refreshed by
+# the collector after every hour. Information only, like D1-D4: the hourly study
+# (services/hourly_study.py) tests whether acting on them would have helped.
+HOURLY_VERSION = "H-1.0"
+MIN_HOURLY_BARS = 100  # about 14 trading days of 7 hourly candles: lets EMA50 settle
+DASHBOARD_HOURLY_BARS = 500  # about 10 weeks: plenty for EMA50 / RSI / ATR to settle
+
+
+@dataclass
+class HourlyMetrics:
+    as_of: str | None = None  # IST start time of the last completed 1h candle used
+    bars: int = 0
+    status: str = "OK"  # OK / INSUFFICIENT_HISTORY / NO_DATA
+    values: dict[str, float | None] = field(default_factory=dict)
+    readings: dict[str, str] = field(default_factory=dict)  # H1-H3: UP / DOWN / NEUTRAL / MISSING
+    notes: list[str] = field(default_factory=list)
+
+
+def hourly_frame(session: Session, instrument_id: int, limit: int | None = None) -> pd.DataFrame:
+    """VALID 1h candles with high, low and close, indexed by IST start time (tz-naive).
+
+    `limit` keeps only the latest candles (the dashboard needs a few hundred, not years).
+    """
+    query = (select(MarketCandle.candle_time, MarketCandle.high, MarketCandle.low, MarketCandle.close)
+             .where(MarketCandle.instrument_id == instrument_id, MarketCandle.timeframe == "1h",
+                    MarketCandle.quality_status == "VALID", MarketCandle.high.is_not(None),
+                    MarketCandle.low.is_not(None), MarketCandle.close.is_not(None))
+             .order_by(MarketCandle.candle_time.desc()))
+    rows = session.execute(query.limit(limit) if limit else query).all()[::-1]
+    if not rows:
+        return pd.DataFrame(columns=["high", "low", "close"], dtype=float)
+    idx = pd.DatetimeIndex([pd.Timestamp(to_ist(from_db(r[0])).replace(tzinfo=None)) for r in rows])
+    return pd.DataFrame({"high": [float(r[1]) for r in rows], "low": [float(r[2]) for r in rows],
+                         "close": [float(r[3]) for r in rows]}, index=idx)
+
+
+def compute_hourly(df: pd.DataFrame) -> HourlyMetrics:
+    """Hourly trend, momentum and pullback readings from completed 1h candles."""
+    m = HourlyMetrics(bars=len(df))
+    if df.empty:
+        m.status = "NO_DATA"
+        return m
+    m.as_of = df.index[-1].strftime("%Y-%m-%d %H:%M")
+    if len(df) < MIN_HOURLY_BARS:
+        m.status = "INSUFFICIENT_HISTORY"
+        m.notes.append(f"{len(df)} hourly candles; {MIN_HOURLY_BARS} needed before the "
+                       "hourly readings are reliable")
+        m.readings = {k: "MISSING" for k in ("H1_hourly_trend", "H2_hourly_momentum",
+                                             "H3_hourly_pullback")}
+        return m
+    close, high, low = df["close"], df["high"], df["low"]
+    ema20, ema50 = ind.ema(close, 20).iloc[-1], ind.ema(close, 50).iloc[-1]
+    rsi14 = ind.rsi(close, 14).iloc[-1]
+    atr14 = ind.atr(high, low, close, 14).iloc[-1]
+    last, last_low, last_high = close.iloc[-1], low.iloc[-1], high.iloc[-1]
+    m.values = {
+        "close": _num(last), "ema20": _num(ema20), "ema50": _num(ema50), "rsi14": _num(rsi14),
+        "atr14": _num(atr14),
+        "ema20_distance_atr": _num((last - ema20) / atr14) if atr14 else None,
+    }
+    up = last > ema50 and ema20 > ema50
+    down = last < ema50 and ema20 < ema50
+    m.readings = {
+        # H1 hourly trend: close vs EMA50 and EMA20 vs EMA50, as D1 but on 1h candles
+        "H1_hourly_trend": _reading(up, down),
+        # H2 hourly momentum: RSI 50-70 supports UP, 30-50 DOWN
+        "H2_hourly_momentum": _reading(50 <= rsi14 <= 70, 30 <= rsi14 < 50),
+        # H3 pullback: inside the hourly trend, the last candle dipped to EMA20 and closed back
+        # on the trend side (a dip being bought / a bounce being sold)
+        "H3_hourly_pullback": _reading(up and last_low <= ema20 < last,
+                                       down and last_high >= ema20 > last),
+    }
+    return m

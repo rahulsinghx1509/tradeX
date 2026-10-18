@@ -94,3 +94,32 @@ def test_metrics_on_sample_data_and_overview(engine, provider, client):
     assert nifty["metrics"]["bars"] > 0 and nifty["metrics"]["values"]["rs20_vs_nifty"] is None
     assert set(bank["metrics"]["readings"]) == {"D1_daily_trend", "D2_weekly_trend",
                                                 "D3_trend_strength", "D4_momentum"}
+
+
+# --------------------------------------------------------------------------- hourly readings
+def _hours(close: np.ndarray, spread: float = 1.0) -> pd.DataFrame:
+    idx = pd.date_range("2026-09-01 09:15", periods=len(close), freq="h")
+    return pd.DataFrame({"high": close + spread, "low": close - spread, "close": close}, index=idx)
+
+
+def test_hourly_readings_need_enough_candles():
+    m = metrics.compute_hourly(_hours(np.linspace(100, 110, 50)))
+    assert m.status == "INSUFFICIENT_HISTORY"
+    assert set(m.readings.values()) == {"MISSING"} and m.values == {}
+
+
+def test_hourly_uptrend_reads_up_and_no_data_is_reported():
+    m = metrics.compute_hourly(_hours(np.linspace(100, 160, 200)))
+    assert m.status == "OK" and m.readings["H1_hourly_trend"] == "UP"
+    assert m.readings["H3_hourly_pullback"] == "NEUTRAL"  # far above EMA20, no dip
+    assert m.as_of == _hours(np.zeros(200)).index[-1].strftime("%Y-%m-%d %H:%M")
+    assert metrics.compute_hourly(pd.DataFrame(columns=["high", "low", "close"])).status == "NO_DATA"
+
+
+def test_hourly_pullback_is_a_dip_to_ema20_that_closes_above_it():
+    close = np.linspace(100, 160, 200)
+    df = _hours(close, spread=0.2)
+    ema20 = ind.ema(df["close"], 20).iloc[-1]
+    df.iloc[-1, df.columns.get_loc("low")] = ema20 - 0.5  # last candle dips through EMA20 ...
+    m = metrics.compute_hourly(df)  # ... and still closes above it
+    assert m.readings["H1_hourly_trend"] == "UP" and m.readings["H3_hourly_pullback"] == "UP"

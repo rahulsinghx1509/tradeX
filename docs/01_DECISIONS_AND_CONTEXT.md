@@ -153,6 +153,20 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   now agree that daily data on these 12 instruments has no dependable direction edge.
 - RK's choice: collect our own option-chain history. From 15:15 IST each trading day the collector
   stores the full chain of the next 2 expiries for every underlying, exactly as Groww sends it
-  (table `option_chain_snapshots`). Field meanings are `NOT_VERIFIED` until checked with
-  `deploy/tradex.sh chain-fields`. After 6–12 months this supports volatility studies (IV vs
+  (table `option_chain_snapshots`). Field names were checked with `deploy/tradex.sh chain-fields`
+  on 2026-10-18: chain `strikes`, `underlying_ltp`; each CE/PE leg `ltp`, `volume`,
+  `open_interest`, `trading_symbol`, `greeks` (`delta`, `gamma`, `theta`, `vega`, `rho`, `iv`).
+  No bid/ask and no OI-change field. Units (IV in % or decimal, OI in contracts or shares) stay
+  `NOT_VERIFIED` until the first stored snapshot is checked. After 6–12 months this supports volatility studies (IV vs
   realised volatility, PCR, OI by strike).
+
+## 13. Hourly chart reading next to the daily history (2026-10-18)
+
+- RK asked for live chart reading together with the history and chose "both together":
+  - Each dashboard card shows hourly readings H1 trend, H2 momentum, H3 pullback (version H-1.0)
+    from the underlying's completed 1h candles, refreshed after each completed hour. Information
+    only, like D1–D4.
+  - Study MTF-1.0 (`deploy/tradex.sh hourly-study`, development years only) tests whether timing
+    long entries on the hourly chart inside the daily trend beats entering on the daily trend
+    alone. Needs hourly history first: `deploy/tradex.sh backfill --timeframes 1h --days-1h 2400`.
+- Live option prices and bid/ask at entry are not built; they come after a rule passes its test.

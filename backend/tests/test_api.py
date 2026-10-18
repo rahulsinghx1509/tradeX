@@ -51,6 +51,9 @@ def test_overview(client, loaded):
     assert nifty["index"]["freshness"]["1d"]["status"] in {"FRESH", "STALE"}
     assert nifty["index"]["change_reference_close"] is not None
     assert len(nifty["futures"]) == 2 and nifty["futures"][0]["days_to_expiry"] >= 0
+    assert body["hourly_version"] and nifty["hourly"]["status"] in {"OK", "INSUFFICIENT_HISTORY"}
+    assert set(nifty["hourly"]["readings"]) == {"H1_hourly_trend", "H2_hourly_momentum",
+                                                "H3_hourly_pullback"}
 
 
 def test_data_quality_endpoint(client, loaded):
