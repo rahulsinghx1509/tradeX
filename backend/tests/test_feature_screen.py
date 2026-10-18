@@ -141,3 +141,34 @@ def test_mechanical_volatility_links_never_survive():
     assert res.loc[("hv20", "vol_surprise"), "q"] < 0.01
     assert not res.loc[("hv20", "vol_surprise"), "survives"]
     assert " m" in fs.to_markdown(dev, res.reset_index(), {}, "now")
+
+
+def _nifty_table(seed, effect):
+    days = pd.bdate_range("2020-03-24", "2026-10-16")
+    rng = np.random.default_rng(seed)
+    chg = rng.normal(0, 8, len(days))
+    t = pd.DataFrame({"vix_chg_5d": chg, "vol_surprise": effect * chg / 8 + rng.normal(0, 0.3, len(days))},
+                     index=days)
+    t.loc[t.index[-25:], "vol_surprise"] = np.nan  # no full next month yet
+    return t
+
+
+def test_final_test_uses_dev_threshold_and_only_held_back_days():
+    info = fs.final_test(_nifty_table(1, 0.3))
+    assert info["first"] >= pd.Timestamp(fs.VALIDATION_FROM)
+    assert info["passed"] and all(info["checks"].values())
+    assert np.isclose(info["threshold"], 8 * 0.8416, atol=0.8)  # ~80th pct of N(0, 8)
+    report = fs.final_markdown(info, "now")
+    assert "PASSED" in report and "no option selling" in report
+
+
+def test_final_test_fails_without_an_effect():
+    info = fs.final_test(_nifty_table(2, 0.0))
+    assert not info["passed"] and "FAILED" in fs.final_markdown(info, "now")
+
+
+def test_final_test_without_vix_fails_cleanly():
+    t = _nifty_table(3, 0.3)
+    t["vix_chg_5d"] = np.nan
+    info = fs.final_test(t)
+    assert not info["passed"] and "FAILED" in fs.final_markdown(info, "now")

@@ -7,9 +7,13 @@ Writes reports/feature_screen.md (the report), reports/feature_screen_results.cs
 metric × target score) and reports/feature_screen_table.csv (the full daily table).
 Development period only; validation is held back.
 
+With --final it runs the one-time final test of the VIX-jump volatility warning on the held-back
+period (NIFTY only) and writes reports/vix_filter_final.md.
+
 Usage (from the repository root):
     python scripts/feature_screen.py
-On the server: deploy/tradex.sh screen
+    python scripts/feature_screen.py --final
+On the server: deploy/tradex.sh screen  (or: deploy/tradex.sh vix-filter-final)
 """
 
 import argparse
@@ -33,8 +37,11 @@ def main() -> int:
     s = get_settings()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--symbols", default=",".join(s.underlying_list))
+    p.add_argument("--final", action="store_true", help="one-time final test of the VIX-jump rule")
     args = p.parse_args()
     symbols = [x.strip().upper() for x in args.symbols.split(",") if x.strip()]
+    if args.final:
+        symbols = [fs.MARKET_SYMBOL]
     provider = s.data_provider.lower()
 
     tables, coverage = [], {}
@@ -72,13 +79,22 @@ def main() -> int:
         print("No instruments with enough daily history: run deploy/tradex.sh backfill first.")
         return 1
     table = pd.concat(tables)
+    out = Path(REPO_ROOT) / "reports"
+    out.mkdir(exist_ok=True)
+    if args.final:
+        info = fs.final_test(table)
+        report = fs.final_markdown(info, datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"))
+        if provider == "sample":
+            report = "**SAMPLE DATA: synthetic prices, results mean nothing.**\n\n" + report
+        (out / "vix_filter_final.md").write_text(report, encoding="utf-8")
+        print("\n" + report)
+        print(f"\nSaved {out / 'vix_filter_final.md'}")
+        return 0
     dev = fs.dev_only(table)
     res = fs.screen(dev)
     report = fs.to_markdown(dev, res, coverage, datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"))
     if provider == "sample":
         report = "**SAMPLE DATA: synthetic prices, results mean nothing.**\n\n" + report
-    out = Path(REPO_ROOT) / "reports"
-    out.mkdir(exist_ok=True)
     (out / "feature_screen.md").write_text(report, encoding="utf-8")
     res.to_csv(out / "feature_screen_results.csv", index=False)
     dev.to_csv(out / "feature_screen_table.csv", index_label="day")
