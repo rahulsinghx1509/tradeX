@@ -282,7 +282,8 @@ def _spearman(a: pd.Series, b: pd.Series) -> float:
 
 
 def _horizon(target: str) -> int:
-    return VOL_WINDOW + 1 if target == "vol_surprise" else int(target.split("_")[1][:-1])
+    """Forward trading days a target looks ahead (volatility targets: the next month)."""
+    return int(target.split("_")[1][:-1]) if target.startswith("ret_") else VOL_WINDOW + 1
 
 
 def newey_west_t(x: pd.Series, lags: int) -> float:
@@ -296,17 +297,25 @@ def newey_west_t(x: pd.Series, lags: int) -> float:
     return float(x.mean() / math.sqrt(var / n)) if var > 0 else 0.0
 
 
-def screen(dev: pd.DataFrame) -> pd.DataFrame:
+def screen(dev: pd.DataFrame, features=None, targets=None, market_features=None,
+           mechanical=None, min_t_cs: float = MIN_ABS_T_CS,
+           min_t_market: float = MIN_ABS_T_MARKET) -> pd.DataFrame:
+    """Score every feature × target. Defaults are this screen's lists; the option screen
+    (services/option_screen.py) passes its own and gets exactly the same scoring rules."""
+    features = list(FEATURES) if features is None else list(features)
+    targets = TARGETS if targets is None else list(targets)
+    market_features = MARKET_FEATURES if market_features is None else tuple(market_features)
+    mechanical = MECHANICAL if mechanical is None else set(mechanical)
     rows = []
     # Cross-section: take out each instrument's own average target over the period. Otherwise a
     # stock that happened to drift up all along (random luck over a few years) makes momentum
     # look predictive in every month, though nobody could know the drift in advance.
     cs = dev.copy()
-    for tgt in TARGETS:
+    for tgt in targets:
         cs[tgt] = dev[tgt] - dev.groupby("symbol")[tgt].transform("mean")
-    for feat in FEATURES:
-        for tgt in TARGETS:
-            if feat in MARKET_FEATURES:
+    for feat in features:
+        for tgt in targets:
+            if feat in market_features:
                 m = market_months(dev, feat, tgt)
                 n = len(m)
                 if n < MIN_MONTHS:
@@ -338,9 +347,9 @@ def screen(dev: pd.DataFrame) -> pd.DataFrame:
     if "p" in res:
         res["q"] = benjamini_hochberg(res["p"])
         same = np.sign(res["ic_1st_half"]) == np.sign(res["ic_2nd_half"])
-        mech = [(f, t) in MECHANICAL for f, t in zip(res["feature"], res["target"], strict=True)]
+        mech = [(f, t) in mechanical for f, t in zip(res["feature"], res["target"], strict=True)]
         res["mechanical"] = mech
-        bar = np.where(res["test"] == "market", MIN_ABS_T_MARKET, MIN_ABS_T_CS)
+        bar = np.where(res["test"] == "market", min_t_market, min_t_cs)
         res["survives"] = ((res["q"] < Q_MAX) & (res["t"].abs() >= bar) & same
                            & ~res["mechanical"])
     else:

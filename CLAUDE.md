@@ -38,7 +38,7 @@ Read these before doing any work:
 - ✅ Every catalog metric mapped to a data source (`docs/07_DATA_SOURCES.md`); free sources need checking from the server (`tradex.sh sources`).
 - ✅ NSE's free daily F&O file loads into `fo_daily` (`tradex.sh fo-history` from 2020; collector adds each day from 19:00 IST).
 - ✅ Option metrics (ATM IV, skew, PCR, max pain, OI walls) rebuilt from `fo_daily` (`tradex.sh option-metrics`, checked against India VIX).
-- 👉 Next: screen the option metrics like FS-1.1 (development data only), then one final test of any survivor.
+- 👉 Next: RK runs `tradex.sh option-screen` (OS-1.0, development data only; docs/01 §16); one final test of any survivor.
 
 ## Code map
 
