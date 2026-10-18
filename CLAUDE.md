@@ -35,7 +35,8 @@ Read these before doing any work:
 - ✅ Studies (docs/01 §11–15): no daily or hourly price-direction edge found on the 12 instruments.
 - ✅ VJ-1.0 VIX-jump volatility warning passed its one-time final test: dashboard banner + Telegram
   alert, option selling NO TRADE on jump days. The only tested rule; not a buy/sell signal.
-- 👉 Next: option-chain history builds daily (PR #18); revisit volatility rules with real option prices.
+- ✅ Every catalog metric mapped to a data source (`docs/07_DATA_SOURCES.md`); free sources need checking from the server (`tradex.sh sources`).
+- 👉 Next: if the free NSE F&O bhavcopy downloads, load its history and test option metrics now; option chains also collect daily (PR #18).
 
 ## Code map
 
