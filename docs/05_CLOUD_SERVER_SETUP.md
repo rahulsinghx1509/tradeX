@@ -192,6 +192,7 @@ The dashboard banner disappears once only real data is shown.
 | `~/tradex/deploy/tradex.sh probe` | Check how far back Groww keeps futures and options history with open interest; report in `~/tradex/reports/derivatives_probe.md` |
 | `~/tradex/deploy/tradex.sh futures-history` | Load daily candles and open interest of every expired monthly future since 2020 (20–40 minutes; safe to stop and re-run) |
 | `~/tradex/deploy/tradex.sh oi-study` | Open-interest study on the development years (needs `futures-history` first); report in `~/tradex/reports/oi_study.md` |
+| `~/tradex/deploy/tradex.sh hourly-study` | Hourly entries inside the daily trend, development years only (load hourly history first: `backfill --timeframes 1h --days-1h 2400`); report in `~/tradex/reports/hourly_study.md` |
 | `~/tradex/deploy/tradex.sh chain-fields` | Show which fields Groww sends in an option chain (stores nothing). The collector stores the chains itself every trading day from 15:15 IST |
 | `~/tradex/deploy/tradex.sh logs collector` | Live collector log (Ctrl+C to leave) |
 | `~/tradex/deploy/tradex.sh restart collector` | Restart one part |

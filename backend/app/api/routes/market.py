@@ -103,8 +103,13 @@ def overview(session: Session = Depends(get_session)) -> dict:
     # Core metrics (Milestone 2) on the underlying's own daily candles. Information only.
     computed = core_metrics.compute_for_instruments(session, spots, now)
     for u in underlyings:
-        m = computed.get(u.pop("_spot_id"))
+        spot_id = u.pop("_spot_id")
+        m = computed.get(spot_id)
         u["metrics"] = (asdict(m) | {"as_of": m.as_of.isoformat() if m.as_of else None}) if m else None
+        # Hourly readings (H1-H3) on the underlying's completed 1h candles. Information only.
+        hourly = (core_metrics.hourly_frame(session, spot_id, core_metrics.DASHBOARD_HOURLY_BARS)
+                  if spot_id else None)
+        u["hourly"] = asdict(core_metrics.compute_hourly(hourly)) if hourly is not None else None
     any_sample = any((u["index"] or {}).get("is_sample") for u in underlyings)
     return {
         "generated_at": now.isoformat(),
@@ -112,6 +117,7 @@ def overview(session: Session = Depends(get_session)) -> dict:
         "data_provider": settings.data_provider,
         "contains_sample_data": any_sample,
         "metrics_version": core_metrics.METRICS_VERSION,
+        "hourly_version": core_metrics.HOURLY_VERSION,
         "signal": {"status": "NOT_BUILT",
                    "message": "Trade signals are not built yet (rule engine comes after "
                               "core metrics and backtesting)."},

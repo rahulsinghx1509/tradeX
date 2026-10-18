@@ -53,18 +53,31 @@ export interface CoreMetrics {
   notes: string[];
 }
 
+// Hourly readings on the underlying's completed 1h candles (metrics.py, compute_hourly).
+// Refreshed after every completed hour during market hours. Information only.
+export interface HourlyMetrics {
+  as_of: string | null; // IST start time of the last 1h candle, "YYYY-MM-DD HH:MM"
+  bars: number;
+  status: "OK" | "INSUFFICIENT_HISTORY" | "NO_DATA";
+  values: Record<string, number | null>;
+  readings: Record<string, Reading>;
+  notes: string[];
+}
+
 export interface Overview {
   generated_at: string;
   market_open: boolean;
   data_provider: string;
   contains_sample_data: boolean;
   metrics_version: string;
+  hourly_version?: string;
   signal: { status: string; message: string };
   underlyings: {
     symbol: string;
     index: InstrumentSummary | null;
     futures: InstrumentSummary[];
     metrics: CoreMetrics | null;
+    hourly?: HourlyMetrics | null;
   }[];
 }
 

@@ -1,11 +1,17 @@
 import { StatusBadge } from "@/components/Badges";
-import { formatIst, formatNumber, type CoreMetrics, type InstrumentSummary, type Reading } from "@/lib/api";
+import { formatIst, formatNumber, type CoreMetrics, type HourlyMetrics, type InstrumentSummary, type Reading } from "@/lib/api";
 
 const READINGS: [string, string][] = [
   ["D1_daily_trend", "Daily trend"],
   ["D2_weekly_trend", "Weekly trend"],
   ["D3_trend_strength", "Trend strength"],
   ["D4_momentum", "Momentum"],
+];
+
+const HOURLY_READINGS: [string, string][] = [
+  ["H1_hourly_trend", "Hourly trend"],
+  ["H2_hourly_momentum", "Hourly momentum"],
+  ["H3_hourly_pullback", "Hourly pullback"],
 ];
 
 const READING_STYLE: Record<Reading, string> = {
@@ -24,20 +30,49 @@ function Metric({ label, value, digits = 2 }: { label: string; value: number | n
   );
 }
 
+function ReadingChips({ items, readings }: { items: [string, string][]; readings: Record<string, Reading> }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {items.map(([key, label]) => {
+        const r = readings[key] ?? "MISSING";
+        return (
+          <span key={key} className={`rounded px-1.5 py-0.5 text-xs font-medium ${READING_STYLE[r]}`}>
+            {label}: {r.toLowerCase()}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function HourlyPanel({ hourly }: { hourly: HourlyMetrics }) {
+  const v = hourly.values;
+  return (
+    <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+      <ReadingChips items={HOURLY_READINGS} readings={hourly.readings} />
+      {hourly.status === "OK" && (
+        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+          <Metric label="1h EMA 20" value={v.ema20} />
+          <Metric label="1h EMA 50" value={v.ema50} />
+          <Metric label="1h RSI 14" value={v.rsi14} digits={1} />
+          <Metric label="1h from EMA20 (ATRs)" value={v.ema20_distance_atr} />
+        </dl>
+      )}
+      <p className="mt-2 text-xs text-slate-500">
+        From {hourly.bars} hourly candles up to the one starting {hourly.as_of ?? "—"} IST. Updates after each completed hour. Information only, not a trade signal.
+      </p>
+      {hourly.notes.map((n) => (
+        <p key={n} className="text-xs text-amber-700 dark:text-amber-400">{n}</p>
+      ))}
+    </div>
+  );
+}
+
 function MetricsPanel({ metrics }: { metrics: CoreMetrics }) {
   const v = metrics.values;
   return (
     <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-      <div className="flex flex-wrap gap-1">
-        {READINGS.map(([key, label]) => {
-          const r = metrics.readings[key] ?? "MISSING";
-          return (
-            <span key={key} className={`rounded px-1.5 py-0.5 text-xs font-medium ${READING_STYLE[r]}`}>
-              {label}: {r.toLowerCase()}
-            </span>
-          );
-        })}
-      </div>
+      <ReadingChips items={READINGS} readings={metrics.readings} />
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
         <Metric label="EMA 20" value={v.ema20} />
         <Metric label="EMA 50" value={v.ema50} />
@@ -60,11 +95,12 @@ function MetricsPanel({ metrics }: { metrics: CoreMetrics }) {
   );
 }
 
-export default function OverviewCard({ symbol, index, futures, metrics }: {
+export default function OverviewCard({ symbol, index, futures, metrics, hourly }: {
   symbol: string;
   index: InstrumentSummary | null;
   futures: InstrumentSummary[];
   metrics: CoreMetrics | null;
+  hourly: HourlyMetrics | null;
 }) {
   const change = index?.change ?? null;
   const up = change !== null && change >= 0;
@@ -91,6 +127,7 @@ export default function OverviewCard({ symbol, index, futures, metrics }: {
         <p className="mt-2 text-sm text-slate-500">No data loaded yet. Run scripts/backfill_candles.py.</p>
       )}
       {metrics && metrics.status !== "NO_DATA" && <MetricsPanel metrics={metrics} />}
+      {hourly && hourly.status !== "NO_DATA" && <HourlyPanel hourly={hourly} />}
       {futures.length > 0 && (
         <table className="mt-4 w-full text-sm">
           <thead className="text-left text-xs uppercase text-slate-500">

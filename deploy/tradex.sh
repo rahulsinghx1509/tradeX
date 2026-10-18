@@ -22,6 +22,7 @@ case "${1:-help}" in
   futures-history) script load_futures_history.py "${@:2}" ;;
   chain-fields) script option_chain_snapshot.py --fields "${@:2}" ;;
   oi-study)   script oi_study.py "${@:2}" && echo "Report: reports/oi_study.md" ;;
+  hourly-study) script hourly_study.py "${@:2}" && echo "Report: reports/hourly_study.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
@@ -44,6 +45,7 @@ Usage: deploy/tradex.sh <command>
   futures-history  load daily candles + OI of expired futures since 2020 (safe to re-run)
   chain-fields show which fields Groww sends in an option chain (stores nothing)
   oi-study     returns after each futures OI build-up, development years only (reports/oi_study.md)
+  hourly-study hourly entries inside the daily trend, development years only (reports/hourly_study.md)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)
   final        one-time final test of variant C on held-back years (reports/final_test.md)
   chat-id      print your Telegram chat ID
