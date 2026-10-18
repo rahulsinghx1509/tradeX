@@ -190,6 +190,7 @@ The dashboard banner disappears once only real data is shown.
 | `~/tradex/deploy/tradex.sh variants` | Compare long-only variants on the development years; report in `~/tradex/reports/long_variants.md` |
 | `~/tradex/deploy/tradex.sh final` | One-time final test of the trailing-stop rules on the held-back years; report in `~/tradex/reports/final_test.md` |
 | `~/tradex/deploy/tradex.sh fo-history` | Load NSE's free daily F&O files (futures, and options near the money) from 2020 into the database; 1-2 hours, safe to stop and re-run. New days then load by themselves every evening from 19:00 IST |
+| `~/tradex/deploy/tradex.sh option-metrics` | Rebuild option metrics (ATM IV, skew, PCR, max pain, OI walls) per underlying and day from the F&O history, with a check against India VIX; report in `~/tradex/reports/option_metrics.md` |
 | `~/tradex/deploy/tradex.sh sources` | Check which free outside data files (NSE F&O bhavcopy, participant OI, ban list, MWPL, FRED global series) download from the server and how far back; report in `~/tradex/reports/data_sources.md` |
 | `~/tradex/deploy/tradex.sh probe` | Check how far back Groww keeps futures and options history with open interest; report in `~/tradex/reports/derivatives_probe.md` |
 | `~/tradex/deploy/tradex.sh futures-history` | Load daily candles and open interest of every expired monthly future since 2020 (20–40 minutes; safe to stop and re-run) |
