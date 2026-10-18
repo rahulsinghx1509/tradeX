@@ -37,7 +37,8 @@ Read these before doing any work:
   alert, option selling NO TRADE on jump days. The only tested rule; not a buy/sell signal.
 - ✅ Every catalog metric mapped to a data source (`docs/07_DATA_SOURCES.md`); free sources need checking from the server (`tradex.sh sources`).
 - ✅ NSE's free daily F&O file loads into `fo_daily` (`tradex.sh fo-history` from 2020; collector adds each day from 19:00 IST).
-- 👉 Next: option metrics (IV, PCR, max pain, strike OI) from `fo_daily` history, then screen them.
+- ✅ Option metrics (ATM IV, skew, PCR, max pain, OI walls) rebuilt from `fo_daily` (`tradex.sh option-metrics`, checked against India VIX).
+- 👉 Next: screen the option metrics like FS-1.1 (development data only), then one final test of any survivor.
 
 ## Code map
 
