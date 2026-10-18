@@ -138,3 +138,9 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   any result was seen: at least 30 trades, expectancy +0.15R or more, profit factor 1.3 or more,
   and no instrument above 50% of total R. If C fails, the rules are not tuned and re-tested on
   the same data.
+- **Result (2026-10-18): FAILED.** On validation, from 2025-04-01, C made 52 trades at +0.21R with
+  a profit factor of 1.37, but SBIN and AXISBANK made all the profit: together they earned more
+  than the total, and the rest lost 0.7R. The instruments that won and lost in development
+  swapped places. Price-trend rules on these underlyings stop here.
+- Next (RK's choice): study the derivatives data, futures open interest and options. Step 1 is
+  `deploy/tradex.sh probe`, which measures how far back Groww keeps that history.
