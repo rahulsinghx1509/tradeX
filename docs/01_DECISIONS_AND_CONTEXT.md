@@ -278,4 +278,14 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   tested on NIFTY one day per month with FS-1.1's rules. Bar |t| ≥ 3.3, set on 150 random worlds
   (3.0 let noise through in 8% of worlds, 3.3 in 4%). File column names are NOT_VERIFIED until
   the first server load; a changed header fails the day loudly.
+- OS-1.0 survivor: `call_wall_pct` (biggest call-OI strike vs forward) against rv_vs_iv (IC −0.137,
+  t −7.5) and vol_surprise (IC −0.114, t −5.6), same sign every year. Possible confound: high-IV
+  names have walls further out. VS-1.0 re-scores it after removing ATM IV, IV rank and the last
+  20 days' move.
+- VS-1.0 (`tradex.sh option-selling`): per underlying and monthly expiry, enter the day after the
+  previous monthly expiry, sell a fly (ATM short, 1 SD wings) and a condor (0.5 SD short, 1.5 SD
+  wings), all four legs must have traded, hold to expiry, settle on the underlying close.
+  Variants A all / B skip VJ-1.0 warning (day before entry) / C B + call wall in top half.
+  Costs are estimates (1% index / 3% stock slippage per leg, 0.15% charges, ₹20 per leg).
+  Development expiries only; a chosen rule then gets one final test with its bar fixed first.
 
