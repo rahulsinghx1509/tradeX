@@ -29,6 +29,10 @@ export interface Instrument {
 export interface InstrumentSummary extends Instrument {
   latest_price: number | null;
   latest_price_time: string | null;
+  // Today's latest 5-minute quote (information only; readings use completed candles).
+  live_price: number | null;
+  live_time: string | null;
+  live_status: "LIVE" | "OLD" | "NO_DATA";
   last_close: number | null;
   last_close_time: string | null;
   previous_close: number | null;

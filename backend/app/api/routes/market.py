@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.serialize import instrument_dict, num, ts
 from app.core.config import get_settings
 from app.core.market_time import from_db, is_market_open, to_ist, utc_now
-from app.db.models import DataQualityLog, IngestionRun, Instrument, MarketCandle
+from app.db.models import DataQualityLog, IngestionRun, Instrument, MarketCandle, MarketSnapshot
 from app.db.session import get_session
 from app.providers.factory import get_provider
 from app.services import metrics as core_metrics
@@ -16,6 +16,7 @@ from app.services.freshness import candle_freshness
 
 router = APIRouter(prefix="/api")
 SEVERITY = {"PASS": 0, "WARN": 1, "FAIL": 2}
+LIVE_MAX_AGE_MINUTES = 15  # the collector takes a quote every ~5 minutes
 
 
 def _last_two_closes(session: Session, instrument_id: int) -> list[MarketCandle]:
@@ -32,6 +33,20 @@ def _latest_hourly(session: Session, instrument_id: int) -> MarketCandle | None:
         .where(MarketCandle.instrument_id == instrument_id, MarketCandle.timeframe == "1h",
                MarketCandle.quality_status == "VALID")
         .order_by(MarketCandle.candle_time.desc()).limit(1))
+
+
+def _live_quote(session: Session, instrument_id: int, now) -> dict:
+    """Today's latest 5-minute quote, for information only: readings use completed candles."""
+    snap = session.scalar(
+        select(MarketSnapshot)
+        .where(MarketSnapshot.instrument_id == instrument_id, MarketSnapshot.last_price.is_not(None))
+        .order_by(MarketSnapshot.observed_at.desc()).limit(1))
+    if snap is None or to_ist(from_db(snap.observed_at)).date() != to_ist(now).date():
+        return {"live_price": None, "live_time": None, "live_status": "NO_DATA"}
+    age_min = (now - from_db(snap.observed_at)).total_seconds() / 60
+    fresh = not snap.is_stale and age_min <= LIVE_MAX_AGE_MINUTES
+    return {"live_price": num(snap.last_price), "live_time": ts(snap.observed_at),
+            "live_status": "LIVE" if fresh else "OLD"}
 
 
 def _latest_dq_status(session: Session, instrument_id: int) -> str:
@@ -70,7 +85,7 @@ def _instrument_summary(session: Session, inst: Instrument, now) -> dict:
         "freshness": {tf: asdict(candle_freshness(session, inst.id, tf, now))
                       for tf in get_settings().timeframe_list},
         "data_quality": _latest_dq_status(session, inst.id),
-    }
+    } | _live_quote(session, inst.id, now)
     for f in out["freshness"].values():
         f["last_candle_time"] = ts(f["last_candle_time"])
         f["expected_latest"] = ts(f["expected_latest"])

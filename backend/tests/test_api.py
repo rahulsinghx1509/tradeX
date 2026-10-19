@@ -85,3 +85,31 @@ def test_other_provider_rows_are_hidden(client, engine, loaded):
         s.commit()
     assert all(i["provider"] == "sample" for i in client.get("/api/instruments").json())
     assert client.get("/api/market/overview").json()["underlyings"][0]["index"]["provider"] == "sample"
+
+
+def test_live_quote_on_cards(engine, client, loaded):
+    from datetime import UTC, datetime, timedelta
+
+    from app.api.routes.market import _live_quote
+    from app.db.models import Instrument, MarketSnapshot
+
+    now = datetime(2026, 10, 19, 6, 0, tzinfo=UTC)  # 11:30 IST
+    with sessionmaker(bind=engine, expire_on_commit=False)() as s:
+        inst = s.query(Instrument).filter_by(instrument_type="INDEX").first()
+        assert _live_quote(s, inst.id, now)["live_status"] == "NO_DATA"
+
+        def add(minutes_ago, price):
+            t = now - timedelta(minutes=minutes_ago)
+            s.add(MarketSnapshot(instrument_id=inst.id, observed_at=t, received_at=t,
+                                 last_price=price, source="sample", is_sample=True))
+            s.commit()
+
+        add(60 * 20, 100.0)  # yesterday: never shown as today's price
+        assert _live_quote(s, inst.id, now)["live_status"] == "NO_DATA"
+        add(40, 101.0)
+        assert _live_quote(s, inst.id, now) | {"live_time": None} == {
+            "live_price": 101.0, "live_time": None, "live_status": "OLD"}
+        add(3, 102.5)
+        assert _live_quote(s, inst.id, now)["live_price"] == 102.5
+        assert _live_quote(s, inst.id, now)["live_status"] == "LIVE"
+    assert "live_status" in client.get("/api/market/overview").json()["underlyings"][0]["index"]

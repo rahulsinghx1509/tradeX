@@ -117,6 +117,12 @@ export default function OverviewCard({ symbol, index, futures, metrics, hourly }
             {change === null ? "No previous close" : `${up ? "+" : ""}${formatNumber(change)} (${formatNumber(index.change_pct)}%) vs previous day close`}
           </p>
           <p className="mt-1 text-xs text-slate-500">Latest 1h candle: {formatIst(index.latest_price_time)} IST</p>
+          {index.live_price !== null && (
+            <p className="text-xs text-slate-500 tabular-nums">
+              {index.live_status === "LIVE" ? "Live" : "Last quote"} {formatNumber(index.live_price)} at {formatIst(index.live_time)} IST
+              {index.live_status === "OLD" && " (not updating)"} · information only
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             {Object.entries(index.freshness).map(([tf, f]) => (
               <StatusBadge key={tf} label={tf} status={f.status} />
