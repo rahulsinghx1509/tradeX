@@ -6,15 +6,14 @@ Docs:          http://localhost:8000/docs
 There are no order-placement endpoints. Version 1 is analysis only.
 """
 
-import logging
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import candles, data_quality, health, instruments, market
 from app.core.config import get_settings
+from app.core.log_setup import setup_logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+setup_logging("%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(title="TradeX API", version="0.1.0",
               description="Read-only market data API. No order execution.")

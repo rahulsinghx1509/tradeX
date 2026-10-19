@@ -13,13 +13,14 @@ import _bootstrap  # noqa: F401
 
 from app.alerts.telegram import AlertError, get_notifier
 from app.core.config import get_settings
+from app.core.log_setup import setup_logging
 from app.core.market_time import utc_now
 from app.db.session import get_sessionmaker
 from app.providers.factory import get_provider
 from app.services.collector import CollectorState, run_cycle
 from app.services.ingestion import sync_instruments
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+setup_logging()
 log = logging.getLogger("collector")
 
 
