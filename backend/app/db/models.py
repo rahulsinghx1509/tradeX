@@ -174,6 +174,37 @@ class FoDaily(Base):
     file_format: Mapped[str] = mapped_column(String(6))  # udiff / old
 
 
+class ParticipantOi(Base):
+    """NSE's daily participant-wise open interest: how many F&O contracts each kind of trader
+    (Client = retail, DII, FII, Pro = brokers' own trading) holds long and short.
+
+    One row per day and participant type (plus NSE's TOTAL row). Counts are contracts as NSE
+    reports them, so a lot-size change moves the level; the screen uses ratios only.
+    Column meanings are matched by name from the file's header (services/participant_oi.py).
+    """
+
+    __tablename__ = "participant_oi"
+    __table_args__ = (UniqueConstraint("trade_date", "client_type", name="uq_participant_oi"),)
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    client_type: Mapped[str] = mapped_column(String(10))  # Client / DII / FII / Pro / TOTAL
+    fut_idx_long: Mapped[int | None] = mapped_column(BigInteger)
+    fut_idx_short: Mapped[int | None] = mapped_column(BigInteger)
+    fut_stk_long: Mapped[int | None] = mapped_column(BigInteger)
+    fut_stk_short: Mapped[int | None] = mapped_column(BigInteger)
+    opt_idx_call_long: Mapped[int | None] = mapped_column(BigInteger)
+    opt_idx_put_long: Mapped[int | None] = mapped_column(BigInteger)
+    opt_idx_call_short: Mapped[int | None] = mapped_column(BigInteger)
+    opt_idx_put_short: Mapped[int | None] = mapped_column(BigInteger)
+    opt_stk_call_long: Mapped[int | None] = mapped_column(BigInteger)
+    opt_stk_put_long: Mapped[int | None] = mapped_column(BigInteger)
+    opt_stk_call_short: Mapped[int | None] = mapped_column(BigInteger)
+    opt_stk_put_short: Mapped[int | None] = mapped_column(BigInteger)
+    total_long: Mapped[int | None] = mapped_column(BigInteger)
+    total_short: Mapped[int | None] = mapped_column(BigInteger)
+
+
 class IngestionRun(Base):
     """One row per collection job, so failures and freshness can be audited."""
 
