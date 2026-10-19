@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from app.db.models import FoDaily
 from app.services import nse_bhavcopy as nb
+from app.services import participant_oi as po
 from app.services.collector import CollectorState, run_cycle
 
 D = date(2026, 10, 16)
@@ -118,14 +119,15 @@ class Notes:
 
 def test_collector_loads_the_evening_file(session, monkeypatch):
     monkeypatch.setattr(nb, "PAUSE_SECONDS", 0)
-    files = {nb.udiff_url(D): zipped(UDIFF)}
+    from tests.test_participant_oi import SAMPLE
+    files = {nb.udiff_url(D): zipped(UDIFF), po.url(D): SAMPLE.encode()}
     state = CollectorState(http_client=lambda: client_for(files))
     notes = Notes()
     evening = datetime(2026, 10, 16, 14, 0, tzinfo=UTC)  # 19:30 IST, a Friday
     state.eod_done_for = "2026-10-16"
     assert run_cycle(session, LiveProvider(), notes, state, evening) == "fo_file"
     assert state.fo_done_for == "2026-10-16" and not notes.sent
-    assert nb.latest_day(session) == D
+    assert nb.latest_day(session) == D and po.latest_day(session) == D
     assert run_cycle(session, LiveProvider(), notes, state, evening) == "idle"
 
 

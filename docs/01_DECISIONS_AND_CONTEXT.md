@@ -261,3 +261,21 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   volatility better than HV20, and its measurement noise reverts), so those pairs are marked
   mechanical. Market-wide bar raised from 3.0 to 3.3 (25 market tests here, not 16), giving a
   false survivor in about 1 random world in 20. Bars fixed before the real run.
+
+## 17. Option screen result and FII/DII positioning screen (2026-10-19)
+
+- OS-1.0 on the server (section 3): options were usually overpriced. On every name the next
+  month's realised volatility was below ATM IV on 59–74% of development days (median log ratio
+  −0.06 to −0.19), but in the worst 5% realised volatility was 1.3–1.7× IV. So any option-selling
+  rule must have defined risk. FINNIFTY has only 18 option days.
+- RK asked for "whatever it takes" to reach clear enter/exit decisions. Next: a backtest of
+  protected monthly option selling on NIFTY (skipping VJ-1.0 warning days), development years
+  only, then one final test. Selling changes the strategy spec (TX-POS-1.0 buys debit spreads),
+  so it needs RK's approval before any live use.
+- PS-1.0: NSE participant-wise OI (FII / DII / Client / Pro long and short contracts) loaded into
+  `participant_oi` (`tradex.sh participant-history`, collector adds each day after the F&O
+  file). Six market-wide readings (long shares of index futures, options call-vs-put bias),
+  tested on NIFTY one day per month with FS-1.1's rules. Bar |t| ≥ 3.3, set on 150 random worlds
+  (3.0 let noise through in 8% of worlds, 3.3 in 4%). File column names are NOT_VERIFIED until
+  the first server load; a changed header fails the day loudly.
+

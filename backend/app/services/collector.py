@@ -7,7 +7,8 @@ During market hours (09:15-15:30 IST, Mon-Fri) it wakes up every few minutes and
 After the close it loads the day's daily candle once (and India VIX's), checks the VIX-jump
 volatility warning (VJ-1.0, see services/vix_warning.py) and sends one alert when a jump starts,
 then sends a heartbeat message so you know it is alive. From 19:00 IST it loads NSE's free daily
-F&O file (services/nse_bhavcopy.py), catching up any missed days. Otherwise it sleeps.
+F&O file (services/nse_bhavcopy.py) and participant-wise OI file (services/participant_oi.py),
+catching up any missed days. Otherwise it sleeps.
 
 This is where the rule engine plugs in later: after each cycle, run the
 (backtested) rules on fresh data and send ENTER / EXIT alerts through the notifier.
@@ -29,7 +30,7 @@ from app.core.config import get_settings
 from app.core.market_time import SESSION_CLOSE, is_market_open, is_trading_day, to_ist
 from app.db.models import Instrument
 from app.providers.base import MarketDataProvider
-from app.services import nse_bhavcopy, option_chain, vix_warning
+from app.services import nse_bhavcopy, option_chain, participant_oi, vix_warning
 from app.services.ingestion import ingest_snapshot, refresh_recent
 
 log = logging.getLogger(__name__)
@@ -120,5 +121,21 @@ def load_fo_file(session: Session, notifier, state: CollectorState, now: datetim
         why = failed[0].error if failed else "no file by 23:00 IST"
         notifier.send(f"TradeX: NSE F&O file for {today.isoformat()} not stored ({why}). "
                       "Option history has a gap for that day; it is retried tomorrow.")
+    load_participant_file(session, notifier, state, today)
     state.fo_done_for = today.isoformat()
     return "fo_file"
+
+
+def load_participant_file(session: Session, notifier, state: CollectorState, today) -> None:
+    """Today's participant OI file plus missed days. Runs once, right after the F&O file."""
+    latest = participant_oi.latest_day(session)
+    start = (max(latest + timedelta(days=1), today - timedelta(days=FO_CATCH_UP_DAYS))
+             if latest else today)
+    with state.http_client() as client:
+        results = participant_oi.load(session, client, start, today)
+    bad = [r for r in results if r.status == "FAILED"
+           or (r.trade_date == today and r.status != "LOADED")]
+    if bad:
+        why = bad[0].error or bad[0].status
+        notifier.send(f"TradeX: NSE participant OI for {bad[0].trade_date.isoformat()} not stored "
+                      f"({why}). It is retried tomorrow.")

@@ -48,7 +48,9 @@ checks the free ones (report in `reports/data_sources.md`).
 2. ✅ F&O file loader (`tradex.sh fo-history` for 2020→today; the collector loads each new day from
    19:00 IST) into table `fo_daily`. Next: compute IV, PCR, max pain and strike OI history from it and
    test the option-chain metrics now instead of waiting 6–12 months.
-3. Participant OI (FII/DII positioning) and the ban list + MWPL as a daily collector step.
+3. ✅ Participant OI (FII/DII positioning): `tradex.sh participant-history` (2020→today) and a daily
+   collector step into table `participant_oi`; screened as PS-1.0. Ban list + MWPL still to do
+   (none of our 12 names is a usual ban candidate, so they matter only as a safety gate).
 4. FRED global series (daily, end of day).
 5. Event calendar file (RBI, FOMC, CPI, Budget, expiry days) kept by hand.
 
