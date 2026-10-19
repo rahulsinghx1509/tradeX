@@ -30,6 +30,7 @@ case "${1:-help}" in
   fo-history) script load_fo_history.py "${@:2}" ;;
   option-metrics) script option_metrics.py "${@:2}" && echo "Report: reports/option_metrics.md" ;;
   option-screen) script option_screen.py "${@:2}" && echo "Report: reports/option_screen.md" ;;
+  option-selling) script option_selling.py "${@:2}" && echo "Report: reports/option_selling.md" ;;
   participant-history) script load_participant_history.py "${@:2}" ;;
   participant-screen) script participant_screen.py "${@:2}" && echo "Report: reports/participant_screen.md" ;;
   sources)    script check_data_sources.py "${@:2}" && echo "Report: reports/data_sources.md" ;;
@@ -63,6 +64,7 @@ Usage: deploy/tradex.sh <command>
   fo-history   load NSE's free daily F&O files since 2020 (options near the money, all futures; 1-2 hours)
   option-metrics ATM IV, skew, PCR, max pain from the F&O history, with checks (reports/option_metrics.md)
   option-screen one-shot screen of the option metrics, development years only (reports/option_screen.md)
+  option-selling protected monthly option selling on real NSE prices, development years only (reports/option_selling.md)
   participant-history load NSE's daily FII/DII/retail positioning file since 2020 (about 30 minutes)
   participant-screen one-shot screen of FII/DII/retail positioning, development years only (reports/participant_screen.md)
   sources      which free NSE/FRED data files download from here, how far back (reports/data_sources.md)

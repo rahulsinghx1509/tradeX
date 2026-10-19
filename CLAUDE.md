@@ -40,7 +40,7 @@ Read these before doing any work:
 - ✅ Option metrics (ATM IV, skew, PCR, max pain, OI walls) rebuilt from `fo_daily` (`tradex.sh option-metrics`, checked against India VIX).
 - ✅ OS-1.0 option screen run: options were usually overpriced (docs/01 §17).
 - ✅ FII/DII positioning file loads into `participant_oi` (`tradex.sh participant-history`); screen PS-1.0.
-- 👉 Next: backtest protected monthly option selling on NIFTY (development years), then one final test.
+- 👉 Next: RK runs `tradex.sh option-selling` (VS-1.0, development years); one final test of the chosen rule.
 
 ## Code map
 
