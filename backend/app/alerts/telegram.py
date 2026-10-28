@@ -9,6 +9,10 @@ How to set up (once):
    as TELEGRAM_CHAT_ID.
 4. Run:  python scripts/send_test_alert.py   - you should get a message.
 
+More than one person: Telegram bots can't message a phone number, only a chat that has
+messaged the bot. Each person opens the bot and sends it "hi"; step 3 then prints every chat
+id. Put them all in TELEGRAM_CHAT_ID separated by commas, e.g. TELEGRAM_CHAT_ID=111,222.
+
 Today this sends test and heartbeat messages. Entry/exit alerts are added once
 the rule engine exists and has been backtested.
 """
@@ -30,19 +34,36 @@ class AlertError(RuntimeError):
     pass
 
 
+def chat_ids(value: str | None) -> list[str]:
+    """TELEGRAM_CHAT_ID may hold several ids separated by commas."""
+    return [c.strip() for c in (value or "").split(",") if c.strip()]
+
+
 class TelegramNotifier:
     def __init__(self, token: str, chat_id: str, client: httpx.Client | None = None):
         self._token = token
-        self._chat_id = chat_id
+        self._chat_ids = chat_ids(chat_id)
         self._client = client or httpx.Client(timeout=10)
 
     def _url(self, method: str) -> str:
         return f"{API}/bot{self._token}/{method}"
 
     def send(self, text: str) -> None:
+        """Send to every chat. One chat failing never stops the others; the error lists them all."""
+        errors = []
+        for n, chat in enumerate(self._chat_ids, start=1):
+            try:
+                self._send_one(chat, text)
+            except AlertError as exc:
+                errors.append(f"chat {n} of {len(self._chat_ids)}: {exc}"
+                              if len(self._chat_ids) > 1 else str(exc))
+        if errors:
+            raise AlertError("; ".join(errors))
+
+    def _send_one(self, chat_id: str, text: str) -> None:
         try:
             resp = self._client.post(self._url("sendMessage"),
-                                     json={"chat_id": self._chat_id, "text": text[:MAX_LEN],
+                                     json={"chat_id": chat_id, "text": text[:MAX_LEN],
                                            "disable_web_page_preview": True})
         except httpx.HTTPError as exc:
             raise AlertError(f"Could not reach Telegram ({type(exc).__name__})") from None
@@ -77,7 +98,7 @@ class ConsoleNotifier:
 
 
 def get_notifier(settings: Settings) -> TelegramNotifier | ConsoleNotifier:
-    if settings.telegram_bot_token and settings.telegram_chat_id:
+    if settings.telegram_bot_token and chat_ids(settings.telegram_chat_id):
         return TelegramNotifier(settings.telegram_bot_token.get_secret_value(),
                                 settings.telegram_chat_id)
     return ConsoleNotifier()
