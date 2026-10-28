@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 from sqlalchemy import func, select
 
+from app.core.config import Settings
 from app.db.models import OptionChainSnapshot
 from app.providers.base import ProviderError
 from app.providers.sample import SampleProvider
@@ -57,7 +58,9 @@ def test_failure_is_reported_and_others_still_stored(session):
     assert [r.status for r in res].count("FAILED") == 2 and rows(session) == 2
 
 
-def test_collector_takes_chains_once_after_1515(session):
+def test_collector_takes_chains_once_after_1515(session, monkeypatch):
+    # the collector refreshes the contract list each morning: keep it to one underlying here
+    monkeypatch.setattr("app.services.collector.get_settings", lambda: Settings(underlyings="NIFTY"))
     p = ChainProvider()
     sync_instruments(session, p, ["NIFTY"], 1)
     rec, state = Recorder(), CollectorState()

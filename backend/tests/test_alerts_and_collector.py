@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import httpx
 import pytest
@@ -7,7 +7,8 @@ import pytest
 from app.alerts.telegram import AlertError, ConsoleNotifier, TelegramNotifier, get_notifier
 from app.core.config import Settings
 from app.core.market_time import IST
-from app.services.collector import CollectorState, run_cycle
+from app.db.models import Instrument
+from app.services.collector import CollectorState, run_cycle, track_problems
 from app.services.ingestion import sync_instruments
 
 TOKEN = "123:fake-token-for-tests"
@@ -93,3 +94,28 @@ def test_collector_intraday_then_end_of_day(session, provider):
 
 def test_collector_sleeps_on_weekend(session, provider):
     assert run_cycle(session, provider, Recorder(), CollectorState(), ist(17, 11, 0)) == "idle"
+
+
+def test_data_problems_alert_only_when_they_last():
+    state = CollectorState()
+    assert track_problems(state, {"NSE-LT-FUT quote": "timeout"}) == []  # first time: wait
+    assert track_problems(state, {}) == [] and state.blips == 1  # fixed itself: a blip only
+    track_problems(state, {"X 1h candles": "rate limit"})
+    msgs = track_problems(state, {"X 1h candles": "rate limit"})
+    assert len(msgs) == 1 and "X 1h candles (rate limit)" in msgs[0]
+    assert track_problems(state, {"X 1h candles": "rate limit"}) == []  # sent once, not every cycle
+    assert track_problems(state, {}) == ["TradeX data recovered: X 1h candles."]
+    assert state.blips == 1
+
+
+def test_collector_refreshes_contracts_each_morning(session, provider):
+    sync_instruments(session, provider, ["NIFTY"], 1)
+    expired = Instrument(symbol="NIFTY", instrument_type="FUTURE", exchange="NSE", segment="FNO",
+                         expiry_date=date(2026, 9, 29), lot_size=65, provider=provider.name,
+                         provider_symbol="SAMPLE-NSE-NIFTY-29Sep26-FUT", is_sample=True)
+    session.add(expired)
+    session.commit()
+    rec = Recorder()
+    run_cycle(session, provider, rec, CollectorState(), ist(15, 11, 0))
+    assert not expired.is_active  # an expired contract stops being polled (no daily false alarms)
+    assert not any("data problem" in m for m in rec.messages)
