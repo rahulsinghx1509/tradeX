@@ -8,7 +8,7 @@ Read these before doing any work:
 
 1. `docs/00_MASTER_PROJECT_BRIEF.md` — the owner's original master brief (scope, architecture, schema, rules).
 2. `docs/01_DECISIONS_AND_CONTEXT.md` — decisions made in planning discussions **after** the brief. Where it differs from the brief, the decisions file wins.
-3. `docs/Futures_Tracking_Sheet.xlsx` — the metric catalog (Metric Dictionary sheet: 47 original metrics + 35 added for options, risk and data quality).
+3. `docs/Futures_Tracking_Sheet.xlsx` — the metric catalog (Metric Dictionary sheet: 67 data metrics; the 14 rule rows were removed 2026-10-28).
 
 ## Owner
 
@@ -40,7 +40,11 @@ Read these before doing any work:
 - ✅ Option metrics (ATM IV, skew, PCR, max pain, OI walls) rebuilt from `fo_daily` (`tradex.sh option-metrics`, checked against India VIX).
 - ✅ OS-1.0 option screen run: options were usually overpriced (docs/01 §17).
 - ✅ FII/DII positioning file loads into `participant_oi` (`tradex.sh participant-history`); screen PS-1.0.
-- 👉 Next: RK runs `tradex.sh option-selling` (VS-1.0, development years); one final test of the chosen rule.
+- ✅ PS-1.0 and VS-1.0 run: no edge. No daily rule beat costs (docs/01 §18).
+- 🔀 2026-10-28 RK: **rules are out**. No buy/exit rules, rule studies, paper journal or sizing rules.
+  Existing study code and VJ-1.0 stay as they are; nothing new is built on them.
+- 👉 Next: option data points on the dashboard (live chain: strike OI and OI change, PCR, max pain, ATM IV,
+  walls) and live chart reading (charts that update during the day).
 
 ## Code map
 
