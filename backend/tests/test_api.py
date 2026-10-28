@@ -3,11 +3,15 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from app.core.market_time import utc_now
+from app.providers.sample import SampleProvider
 from app.services.ingestion import backfill, sync_instruments
 
 
 @pytest.fixture
-def loaded(engine, provider):
+def loaded(engine):
+    # The API reads the real clock, so the sample contracts must too: with the fixed test date,
+    # its October expiry counts as expired once the real date passes it.
+    provider = SampleProvider()
     with sessionmaker(bind=engine, expire_on_commit=False)() as s:
         sync_instruments(s, provider, ["NIFTY", "BANKNIFTY"], 2)
         backfill(s, provider, "1d", 30, now=utc_now())

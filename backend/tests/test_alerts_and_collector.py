@@ -4,7 +4,8 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from app.alerts.telegram import AlertError, TelegramNotifier
+from app.alerts.telegram import AlertError, ConsoleNotifier, TelegramNotifier, get_notifier
+from app.core.config import Settings
 from app.core.market_time import IST
 from app.services.collector import CollectorState, run_cycle
 from app.services.ingestion import sync_instruments
@@ -33,6 +34,29 @@ def test_telegram_error_does_not_leak_token():
     with pytest.raises(AlertError) as exc:
         n.send("x")
     assert "Unauthorized" in str(exc.value) and TOKEN not in str(exc.value)
+
+
+def test_telegram_sends_to_every_chat_and_reports_failures():
+    sent = []
+
+    def handler(request):
+        chat = json.loads(request.content)["chat_id"]
+        sent.append(chat)
+        if chat == "222":
+            return httpx.Response(400, json={"ok": False, "description": "chat not found"})
+        return httpx.Response(200, json={"ok": True})
+
+    n = TelegramNotifier(TOKEN, " 111, 222 ,333", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    with pytest.raises(AlertError, match="chat 2 of 3: .*chat not found"):
+        n.send("hello")
+    assert sent == ["111", "222", "333"]  # one bad chat doesn't stop the others
+
+
+def test_notifier_needs_a_chat_id():
+    s = Settings(telegram_bot_token="x", telegram_chat_id=" , ")
+    assert isinstance(get_notifier(s), ConsoleNotifier)
+    s = Settings(telegram_bot_token="x", telegram_chat_id="1,2")
+    assert isinstance(get_notifier(s), TelegramNotifier)
 
 
 def test_telegram_chat_id_lookup():

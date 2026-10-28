@@ -50,7 +50,7 @@ class Settings(BaseSettings):
 
     # --- Alerts (Telegram) ---------------------------------------------------
     telegram_bot_token: SecretStr | None = None
-    telegram_chat_id: str | None = None
+    telegram_chat_id: str | None = None  # one id, or several separated by commas
 
     # --- Collector (the always-on process) -----------------------------------
     collector_interval_minutes: int = Field(default=5, ge=1, le=60)

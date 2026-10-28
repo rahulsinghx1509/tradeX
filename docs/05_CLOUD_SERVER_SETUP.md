@@ -160,6 +160,12 @@ Copy the number it prints into `TELEGRAM_CHAT_ID` in `.env` (as in E2), then:
 
 You should get a Telegram message.
 
+**Alerts to more than one person.** A bot can't message a phone number, only a chat that has
+messaged it. Ask the other person to open your bot in Telegram (search its name, e.g.
+@tradeXrk_bot) and send it "hi". Run `tradex.sh chat-id` again: it prints both chat ids. Put
+both in `.env`, separated by a comma (`TELEGRAM_CHAT_ID=111111111,222222222`), then
+`tradex.sh restart collector` and `tradex.sh test-alert`. Each person gets every alert.
+
 ### E4. Milestone 0: check what Groww really provides
 
 ```bash
