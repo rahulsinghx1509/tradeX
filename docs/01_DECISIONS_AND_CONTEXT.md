@@ -289,3 +289,23 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   Costs are estimates (1% index / 3% stock slippage per leg, 0.15% charges, ₹20 per leg).
   Development expiries only; a chosen rule then gets one final test with its bar fixed first.
 
+
+## 18. Results, and the change of direction: data only (2026-10-19 to 2026-10-28)
+
+- PS-1.0 on the server (1,680 days loaded): no survivors. Best links t 2.2 (Pro futures long
+  share → vol_surprise) and 2.0 (Client option bias → vol_surprise), bar 3.3. FII/DII
+  positioning is not an entry signal.
+- VS-1.0 on the server: no edge worth a final test. Average R per trade after costs: A fly −0.09,
+  condor −0.05; B −0.05 / −0.02; C (B + call wall top half) −0.00 / +0.01 (profit factor 1.06).
+  Years alternate; FINNIFTY had 79 months skipped (illiquid wings). The held-back period was not
+  spent on a break-even rule.
+- Summary of all studies: no daily or hourly rule (direction, positioning, option selling) beat
+  costs on 2020–2025. Only VJ-1.0 (VIX-jump warning) passed its final test.
+- **2026-10-28, RK: rules are out.** No buy/exit rules, rule studies, paper journal or risk/sizing
+  rules are built from now on. TradeX focuses on **option data points** (live option chain: OI and
+  OI change by strike, PCR, max pain, ATM IV, call/put walls) and **live chart reading** (charts
+  that update during the day). Existing study code and the VJ-1.0 banner/alert stay as they are
+  (RK chose "keep, stop building"); nothing new is added to them.
+- The 14 rule rows were removed from the metric catalog (Risk & Position Sizing, Option Trade
+  Management, Portfolio Risk Controls): 67 metrics remain. `docs/06_STRATEGY_SPEC.md` stays as a
+  record but is not being built.

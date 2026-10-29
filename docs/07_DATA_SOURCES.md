@@ -9,7 +9,7 @@ checks the free ones (report in `reports/data_sources.md`).
 | Group | Metrics | Data status |
 |---|---|---|
 | A. Have it now (Groww candles, futures OI, India VIX) | 26 | Collected and tested in the screen (docs/01 §15) |
-| B. Rules and controls (risk, sizing, trade management, data quality) | ~22 | Need no outside data; computed from our own prices, positions and settings |
+| B. Data quality checks (rule, sizing and trade-management rows removed 2026-10-28, docs/01 §18) | 4 | Need no outside data; computed from our own prices |
 | C. Option-chain metrics (IV, Greeks, PCR, max pain, strike OI, skew) | ~16 | Groww chain collected daily from 2026-10-19 (forward only). **Free NSE F&O bhavcopy may give years of history: NOT_VERIFIED** |
 | D. Outside data (FII/DII, ban list, global, events) | ~14 | Free sources found; none downloaded yet (NOT_VERIFIED) |
 | E. Paid only | 2 | Bid-ask spread history, order-book depth. Not needed now; collect our own snapshots forward |
