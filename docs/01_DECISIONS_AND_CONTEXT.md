@@ -324,7 +324,16 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Not yet verified: Groww 5-min / 15-min candles (only 1h and 1d are wired), how far back
   intraday history goes, quote depth and circuit fields, and every NSE file named in the new rows.
   These are checked from the server before anything is built on them.
-- Still in force from §18 unless RK says otherwise: data only, no buy/exit rules.
+- ~~Still in force from §18 unless RK says otherwise: data only, no buy/exit rules.~~
+- **RK, 2026-10-29 (later):** wants morning buy/sell signals for intraday, with a sell notification,
+  decided from the data points ("test data one two days ... give me signal to buy or sell in
+  morning"). This reopens signals for intraday only. Agreed order: (1) collect the data points;
+  (2) test each setup on as much past intraday data as Groww gives, after costs (one or two days
+  can't tell an edge from luck); (3) setups that pass go to Telegram marked PAPER for 2-3 weeks;
+  (4) real alerts only after RK approves the paper results. Alerts only, never orders (V1 rule).
+- First check: `deploy/tradex.sh intraday-probe` (reports/intraday_probe.md): 1/5/15-min candle
+  depth and request size, a full day of 5-min bars, quote fields, the two NSE member lists, the
+  delivery file, and which members Groww lists and which have futures.
 - Server note: 100 stocks polled every 5 minutes is about 200 Groww calls per cycle (quote + 5-min
   candle). That fits Groww's documented 10 calls/second; the 1 GB server's database growth
   (~7,500 5-min candles a day) is small.

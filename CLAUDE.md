@@ -45,8 +45,10 @@ Read these before doing any work:
   Existing study code and VJ-1.0 stay as they are; nothing new is built on them.
 - 🔀 2026-10-29 RK: focus moves to **intraday**, all NIFTY 50 + NIFTY Next 50 stocks (docs/01 §19);
   36 intraday data points added to the catalog.
-- 👉 Next: verify from the server what Groww gives intraday (5/15-min candles, history depth, depth,
-  option chain fields) and NSE's constituent list, then collect the 100 stocks and show live intraday charts.
+- 🔀 2026-10-29 RK (later): intraday signals are back in scope: data points first, then setups tested on
+  past intraday data, PAPER Telegram signals, real alerts only after RK approves (docs/01 §19). Never orders.
+- 👉 Next: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
+  then collect the 100 stocks and show live intraday charts.
 
 ## Code map
 
