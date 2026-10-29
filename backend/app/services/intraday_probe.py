@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import csv
 import io
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -32,7 +33,13 @@ from app.providers.groww import parse_candles
 from app.services import source_check as sc
 
 # From the SDK "Annexures" page (NOT_VERIFIED): our name -> Groww's candle_interval.
-INTRADAY_INTERVALS = {"1m": "1minute", "5m": "5minute", "15m": "15minute"}
+# 1h is a control: it is known to work (Milestone 0), so if it also fails, Groww is down.
+INTRADAY_INTERVALS = {"1m": "1minute", "5m": "5minute", "15m": "15minute", "1h": "1hour"}
+# Groww's gateway sometimes answers "no healthy upstream" (its backend is down): retry once.
+DOWN_TEXT, TOO_LONG_TEXT = "no healthy upstream", "can only be queried for"
+RETRY_PAUSE = 3.0
+# Full text of every distinct error, so the tables can show short labels.
+SEEN_ERRORS: dict[str, int] = {}
 DEPTH_AGES_DAYS = [3, 30, 60, 90, 120, 180, 270, 365, 545, 730, 1095, 1460, 1825]
 DEPTH_WINDOW = timedelta(days=5)  # a few trading days, so one holiday can't look like "no data"
 WINDOW_LENGTHS_DAYS = [1, 5, 10, 15, 30, 60, 90, 180]
@@ -54,13 +61,27 @@ def _fmt(t: datetime) -> str:
 
 
 def _err(exc: Exception) -> str:
-    return f"error: {str(exc)[:100]}"
+    """A short label for the tables; the full message is kept in SEEN_ERRORS for the report."""
+    text = str(exc)
+    SEEN_ERRORS[text] = SEEN_ERRORS.get(text, 0) + 1
+    if DOWN_TEXT in text.lower():
+        return "DOWN"
+    if TOO_LONG_TEXT in text.lower():
+        return "TOO LONG"
+    return "ERROR"
 
 
 def fetch(client: Any, inst: InstrumentInfo, interval: str, start: datetime, end: datetime):
-    payload = client.get_historical_candles(
-        exchange=inst.exchange, segment=inst.segment, groww_symbol=inst.provider_symbol,
-        start_time=_fmt(start), end_time=_fmt(end), candle_interval=INTRADAY_INTERVALS[interval])
+    kwargs = dict(exchange=inst.exchange, segment=inst.segment, groww_symbol=inst.provider_symbol,
+                  start_time=_fmt(start), end_time=_fmt(end),
+                  candle_interval=INTRADAY_INTERVALS[interval])
+    try:
+        payload = client.get_historical_candles(**kwargs)
+    except Exception as exc:
+        if DOWN_TEXT not in str(exc).lower():
+            raise
+        time.sleep(RETRY_PAUSE)
+        payload = client.get_historical_candles(**kwargs)
     return parse_candles(payload or {}, interval)
 
 
@@ -237,6 +258,7 @@ def last_full_day(now: datetime, holidays: frozenset[date] | None = None) -> dat
 
 def run_groww(client: Any, targets: dict[str, InstrumentInfo], now: datetime,
               holidays: frozenset[date] | None = None, log=print) -> ProbeResult:
+    SEEN_ERRORS.clear()
     res = ProbeResult(now)
     day = last_full_day(now, holidays)
     day_end = session_bounds(day)[1]
@@ -274,13 +296,18 @@ def to_markdown(res: ProbeResult) -> str:
     ages = DEPTH_AGES_DAYS
     lines = ["# Intraday probe (Groww + NSE)", "",
              f"Run on the server at {to_ist(res.now):%Y-%m-%d %H:%M} IST. Counts, times and field "
-             "names only, no prices.", "", "## Summary", ""]
+             "names only, no prices. In the tables DOWN = Groww answered \"no healthy upstream\" "
+             "twice, TOO LONG = the request covered more days than Groww allows (full messages "
+             "at the end). 1h is a control that worked before.", "", "## Summary", ""]
     for r in res.depth:
         old = r.oldest_age
         lines.append(f"- **{r.label} {r.interval}**: "
                      + ("no candles at any age" if old is None else
                         f"candles found back to about {old} days ago "
                         f"({to_ist(res.now - timedelta(days=old)):%Y-%m-%d})"))
+    if SEEN_ERRORS:
+        lines += ["", "## Errors seen (full text)", ""]
+        lines += [f"- {n}x: {text}" for text, n in SEEN_ERRORS.items()]
     lines += ["", "## History depth", "",
               f"Candles in a {DEPTH_WINDOW.days}-day window ending N days ago.", "",
               "| Instrument | Size | " + " | ".join(f"{a}d" for a in ages) + " |",
@@ -339,4 +366,3 @@ def target_instruments(instruments: list[InstrumentInfo], stock: str) -> dict[st
             out[f"{stock} future"] = i
     order = [f"{stock} stock", "NIFTY index", f"{stock} future"]
     return {k: out[k] for k in order if k in out}
-

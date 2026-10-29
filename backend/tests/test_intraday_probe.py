@@ -23,7 +23,7 @@ class FakeClient:
         start = datetime.fromisoformat(kw["start_time"]).replace(tzinfo=IST)
         end = datetime.fromisoformat(kw["end_time"]).replace(tzinfo=IST)
         if end - start > timedelta(days=30):
-            raise RuntimeError("time range too large")
+            raise RuntimeError("Interval 5minute can only be queried for a maximum of 30 days")
         oldest = NOW - timedelta(days=100)
         if end < oldest:
             return {"candles": []}
@@ -44,12 +44,12 @@ def test_depth_finds_the_oldest_age_and_records_errors():
     five = ip.probe_depth(c, STOCK, "RELIANCE stock", "5m", NOW)
     assert five.oldest_age == 90 and five.counts[120] == 0
     one = ip.probe_depth(c, STOCK, "RELIANCE stock", "1m", NOW)
-    assert one.oldest_age is None and str(one.counts[3]).startswith("error: Invalid interval")
+    assert one.oldest_age is None and one.counts[3] == "ERROR"
 
 
 def test_window_probe_shows_where_requests_get_too_long():
     w = ip.probe_window(FakeClient(), STOCK, "5m", NOW)
-    assert isinstance(w[30], int) and str(w[60]).startswith("error: time range")
+    assert isinstance(w[30], int) and w[60] == "TOO LONG"
 
 
 def test_one_day_counts_bars_and_missing_values():
@@ -119,3 +119,26 @@ def test_full_run_writes_a_report_without_prices():
     assert "**NIFTY index 1m**: no candles at any age" in md
     assert "| RELIANCE stock | 2026-10-29 | 75 | 09:15 | 15:25 |" in md
     assert "1.5" not in md  # the close price never reaches the report
+    assert "- 34x: Invalid interval" in md  # 1m: 13 ages x 2 instruments + 8 request sizes
+
+
+class FlakyClient(FakeClient):
+    """Answers "no healthy upstream" on every other call, like Groww's gateway on 29 Oct."""
+
+    def __init__(self, always_down=False):
+        self.calls, self.always_down = 0, always_down
+
+    def get_historical_candles(self, **kw):
+        self.calls += 1
+        if self.always_down or self.calls % 2:
+            raise RuntimeError("Groww get_historical_candles failed (GrowwAPIException: "
+                               "no healthy upstream)")
+        return super().get_historical_candles(**kw)
+
+
+def test_a_down_answer_is_retried_once_then_labelled(monkeypatch):
+    monkeypatch.setattr(ip, "RETRY_PAUSE", 0)
+    flaky = FlakyClient()
+    sizes = ip.probe_window(flaky, STOCK, "5m", NOW)
+    assert sizes[5] == 75 and flaky.calls == 2 * len(sizes)  # each size: one DOWN, one retry
+    assert ip.probe_window(FlakyClient(always_down=True), STOCK, "5m", NOW)[5] == "DOWN"
