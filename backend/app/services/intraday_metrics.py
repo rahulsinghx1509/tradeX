@@ -39,14 +39,14 @@ RVOL_MIN_DAYS = 5
 BAND_WIDTHS = (1.0, 2.0)
 
 
-def _session(times: pd.Series) -> pd.Series:
+def session_dates(times: pd.Series) -> pd.Series:
     return pd.to_datetime(times, utc=True).dt.tz_convert(IST).dt.date
 
 
 def daily_levels(daily: pd.DataFrame) -> pd.DataFrame:
     """Levels for each day from the day before it, plus that day's opening gap."""
     d = daily.sort_values("time").reset_index(drop=True)
-    out = pd.DataFrame({"session": _session(d["time"])})
+    out = pd.DataFrame({"session": session_dates(d["time"])})
     h, low, c = d["high"].shift(), d["low"].shift(), d["close"].shift()
     p = (h + low + c) / 3
     out["prev_high"], out["prev_low"], out["prev_close"] = h, low, c
@@ -66,7 +66,7 @@ def bar_metrics(bars: pd.DataFrame, opening_range_minutes: int = OPENING_RANGE_M
                 ) -> pd.DataFrame:
     """Per-bar intraday readings. `bars` holds one size of bar (5m or 15m) over several days."""
     b = bars.sort_values("time").reset_index(drop=True)
-    out = pd.DataFrame({"time": b["time"], "session": _session(b["time"])})
+    out = pd.DataFrame({"time": b["time"], "session": session_dates(b["time"])})
     day = out["session"]
 
     # VWAP and bands, reset each day; missing from the first bar without volume.

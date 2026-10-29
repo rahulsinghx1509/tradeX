@@ -54,7 +54,7 @@ def test_overview(client, loaded):
     assert nifty["symbol"] == "NIFTY" and nifty["index"]["last_close"] is not None
     assert nifty["index"]["freshness"]["1d"]["status"] in {"FRESH", "STALE"}
     assert nifty["index"]["change_reference_close"] is not None
-    assert len(nifty["futures"]) == 2 and nifty["futures"][0]["days_to_expiry"] >= 0
+    assert nifty["futures"] == []  # F&O view switched off on the dashboard (29 Oct)
     assert body["hourly_version"] and nifty["hourly"]["status"] in {"OK", "INSUFFICIENT_HISTORY"}
     assert set(nifty["hourly"]["readings"]) == {"H1_hourly_trend", "H2_hourly_momentum",
                                                 "H3_hourly_pullback"}
@@ -117,3 +117,26 @@ def test_live_quote_on_cards(engine, client, loaded):
         assert _live_quote(s, inst.id, now)["live_price"] == 102.5
         assert _live_quote(s, inst.id, now)["live_status"] == "LIVE"
     assert "live_status" in client.get("/api/market/overview").json()["underlyings"][0]["index"]
+
+
+def test_intraday_levels_endpoint(client, loaded):
+    inst = client.get("/api/instruments", params={"symbol": "NIFTY", "instrument_type": "INDEX"}).json()[0]
+    body = client.get("/api/intraday", params={"instrument_id": inst["id"], "timeframe": "1h"}).json()
+    assert body["session"] and len(body["bars"]) > 0
+    last = body["bars"][-1]
+    assert last["vwap"] is None  # an index has no volume, so no VWAP (missing, not zero)
+    assert last["or_high"] is None  # no opening range on 1h bars
+    lv = body["levels"]
+    assert lv["prev_high"] >= lv["prev_low"] and lv["cpr_top"] >= lv["cpr_bottom"]
+    empty = client.get("/api/intraday", params={"instrument_id": inst["id"], "timeframe": "5m"}).json()
+    assert empty["bars"] == [] and empty["levels"] is None
+    assert client.get("/api/intraday", params={"instrument_id": 999}).status_code == 404
+    assert client.get("/api/intraday", params={"instrument_id": inst["id"],
+                                               "timeframe": "1d"}).status_code == 422
+
+
+def test_intraday_vwap_where_there_is_volume(client, loaded):
+    fut = client.get("/api/instruments", params={"symbol": "NIFTY", "instrument_type": "FUTURE"}).json()[0]
+    body = client.get("/api/intraday", params={"instrument_id": fut["id"], "timeframe": "1h"}).json()
+    today = [b for b in body["bars"] if b["vwap"] is not None]
+    assert today and all(b["vwap"] > 0 for b in today)

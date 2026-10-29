@@ -5,19 +5,35 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Pill, SampleBanner, StatusBadge } from "@/components/Badges";
 import OverviewCard from "@/components/OverviewCard";
-import { api, formatIst, type CandleResponse, type Overview, type QualityCheck, type VixWarning } from "@/lib/api";
+import {
+  api, formatIst, formatNumber, type CandleResponse, type IntradayResponse, type Overview, type QualityCheck, type VixWarning,
+} from "@/lib/api";
 
 // The chart touches `window`, so it only renders in the browser.
 const CandleChart = dynamic(() => import("@/components/CandleChart"), { ssr: false });
 
+// Intraday first. "Auto" shows the smallest size that has candles stored (5-min data starts once
+// the collector gathers it; until then the chart falls back to 15-min, then 1 hour).
 const TIMEFRAMES = [
-  { value: "1d", label: "Daily (positional)" },
+  { value: "auto", label: "Auto (smallest available)" },
+  { value: "5m", label: "5 min" },
+  { value: "15m", label: "15 min" },
   { value: "1h", label: "1 hour" },
+  { value: "1d", label: "Daily" },
 ];
+const AUTO_ORDER = ["5m", "15m", "1h"];
+
+function formatRange(low: number | null | undefined, high: number | null | undefined): string {
+  return low === null || low === undefined || high === null || high === undefined
+    ? "—" : `${formatNumber(low)}–${formatNumber(high)}`;
+}
+const INTRADAY = new Set(["5m", "15m", "1h"]);
 const REFRESH_MS = 60_000;
 
 // VJ-1.0: the only rule that passed a held-back test. A volatility warning, never a buy/sell signal.
-function VixWarningBanner({ w }: { w: VixWarning }) {
+// Its banner is about option selling, so it is hidden since the F&O view was switched off
+// (2026-10-29); the Telegram alert still runs. Kept here to switch back on.
+export function VixWarningBanner({ w }: { w: VixWarning }) {
   const tone =
     w.status === "WARNING"
       ? "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100"
@@ -45,8 +61,9 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [symbol, setSymbol] = useState<string>("NIFTY");
   const [instrumentId, setInstrumentId] = useState<number | null>(null);
-  const [timeframe, setTimeframe] = useState("1d");
+  const [timeframe, setTimeframe] = useState("auto");
   const [candles, setCandles] = useState<CandleResponse | null>(null);
+  const [intraday, setIntraday] = useState<IntradayResponse | null>(null);
   const [checks, setChecks] = useState<QualityCheck[]>([]);
 
   const loadOverview = useCallback(async () => {
@@ -65,10 +82,12 @@ export default function Dashboard() {
   }, [loadOverview]);
 
   const current = overview?.underlyings.find((u) => u.symbol === symbol);
-  const contracts = useMemo(
-    () => (current ? [current.index, ...current.futures].filter((x) => x !== null) : []),
-    [current],
-  );
+  // F&O view switched off 2026-10-29 (RK): only the stock / index itself, no futures contracts.
+  // const contracts = useMemo(
+  //   () => (current ? [current.index, ...current.futures].filter((x) => x !== null) : []),
+  //   [current],
+  // );
+  const contracts = useMemo(() => (current?.index ? [current.index] : []), [current]);
 
   // Default to the index / stock when the underlying changes or the old contract disappears.
   useEffect(() => {
@@ -80,20 +99,35 @@ export default function Dashboard() {
   useEffect(() => {
     if (instrumentId === null) return;
     let cancelled = false;
-    Promise.all([api.candles(instrumentId, timeframe), api.dataQuality(instrumentId)])
-      .then(([c, q]) => {
-        if (!cancelled) {
-          setCandles(c);
-          setChecks(q.checks.filter((x) => x.timeframe === timeframe));
-        }
-      })
-      .catch(() => !cancelled && setError("Could not load candles."));
+    const load = async () => {
+      // Auto: try 5m, then 15m, then 1h, and keep the first size that has candles.
+      let tf = timeframe;
+      let c: CandleResponse | null = null;
+      for (const t of timeframe === "auto" ? AUTO_ORDER : [timeframe]) {
+        c = await api.candles(instrumentId, t, t === "1h" ? 60 : 300);
+        tf = t;
+        if (c.count > 0) break;
+      }
+      const [q, iday] = await Promise.all([
+        api.dataQuality(instrumentId),
+        INTRADAY.has(tf) ? api.intraday(instrumentId, tf, tf === "1h" ? 60 : 300) : Promise.resolve(null),
+      ]);
+      if (!cancelled) {
+        setCandles(c);
+        setIntraday(iday);
+        setChecks(q.checks.filter((x) => x.timeframe === tf));
+      }
+    };
+    load().catch(() => !cancelled && setError("Could not load candles."));
     return () => {
       cancelled = true;
     };
   }, [instrumentId, timeframe, overview?.generated_at]);
 
   const selected = contracts.find((c) => c.id === instrumentId);
+  const shownTf = candles?.timeframe ?? timeframe;
+  const lv = intraday?.levels;
+  const lastBar = intraday?.bars.length ? intraday.bars[intraday.bars.length - 1] : null;
   const latestRunChecks = checks.length ? checks.filter((c) => c.run_id === checks[0].run_id) : [];
 
   return (
@@ -116,11 +150,12 @@ export default function Dashboard() {
         {error && <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">{error}</p>}
 
         {overview && (
-          <>
-            {overview.vix_warning && <VixWarningBanner w={overview.vix_warning} />}
+          // The chart comes first (order-first) since this page is mainly for intraday reading.
+          <div className="flex flex-col gap-6">
+            {/* {overview.vix_warning && <VixWarningBanner w={overview.vix_warning} />} */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {overview.underlyings.map((u) => (
-                <OverviewCard key={u.symbol} symbol={u.symbol} index={u.index} futures={u.futures} metrics={u.metrics ?? null} hourly={u.hourly ?? null} />
+                <OverviewCard key={u.symbol} symbol={u.symbol} index={u.index} metrics={u.metrics ?? null} hourly={u.hourly ?? null} />
               ))}
             </div>
 
@@ -130,7 +165,7 @@ export default function Dashboard() {
               <span className="text-slate-500">{overview.signal.message}</span>
             </section>
 
-            <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <section className="order-first space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <label className="flex items-center gap-1">
                   Instrument
@@ -139,6 +174,7 @@ export default function Dashboard() {
                     {overview.underlyings.map((u) => <option key={u.symbol}>{u.symbol}</option>)}
                   </select>
                 </label>
+                {/* F&O view switched off 2026-10-29 (RK). Contract / expiry picker:
                 <label className="flex items-center gap-1">
                   Contract / expiry
                   <select className="rounded border border-slate-300 bg-transparent px-2 py-1 dark:border-slate-700"
@@ -152,6 +188,7 @@ export default function Dashboard() {
                     ))}
                   </select>
                 </label>
+                */}
                 <label className="flex items-center gap-1">
                   Timeframe
                   <select className="rounded border border-slate-300 bg-transparent px-2 py-1 dark:border-slate-700"
@@ -159,25 +196,39 @@ export default function Dashboard() {
                     {TIMEFRAMES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </label>
-                {selected && <StatusBadge label="Freshness" status={selected.freshness[timeframe]?.status ?? "NO_DATA"} />}
+                {selected?.freshness[shownTf] && <StatusBadge label="Freshness" status={selected.freshness[shownTf].status} />}
                 {candles?.is_sample && <Pill tone="warn" text="SAMPLE DATA" />}
               </div>
 
+              {intraday?.session && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums text-slate-600 dark:text-slate-300">
+                  <span>Day {intraday.session}</span>
+                  <span>PDH {formatNumber(lv?.prev_high)}</span>
+                  <span>PDL {formatNumber(lv?.prev_low)}</span>
+                  <span>PDC {formatNumber(lv?.prev_close)}</span>
+                  <span>Gap {lv?.gap_pct === null || lv?.gap_pct === undefined ? "—" : `${formatNumber(lv.gap_pct)}%`}</span>
+                  <span>Pivot {formatNumber(lv?.pivot)} (R1 {formatNumber(lv?.r1)} · S1 {formatNumber(lv?.s1)})</span>
+                  <span>CPR {formatRange(lv?.cpr_bottom, lv?.cpr_top)}</span>
+                  <span>Opening range {formatRange(lastBar?.or_low, lastBar?.or_high)}</span>
+                  <span>VWAP {formatNumber(lastBar?.vwap)}</span>
+                  <span>RVOL {formatNumber(lastBar?.rvol)}</span>
+                </div>
+              )}
+
               {candles && candles.count > 0 ? (
-                <CandleChart candles={candles.candles} showOi={selected?.instrument_type === "FUTURE"} />
+                <CandleChart candles={candles.candles} intraday={intraday} />
               ) : (
                 <p className="py-16 text-center text-sm text-slate-500">No candles stored for this selection yet.</p>
               )}
               <p className="text-xs text-slate-500">
-                Times in IST. Showing the latest {candles?.count ?? 0} completed candles
-                {selected?.instrument_type === "FUTURE"
-                  ? "; purple line = open interest"
-                  : selected?.instrument_type === "STOCK" ? "; stocks have no OI" : "; indices have no volume or OI"}.
+                Times in IST. Showing the latest {candles?.count ?? 0} completed {shownTf} candles
+                {INTRADAY.has(shownTf) ? ". Orange = VWAP, blue dashed = previous day high/low, purple = opening range (first 15 min)" : ""}
+                {selected?.instrument_type === "INDEX" ? "; indices have no volume, so no VWAP" : ""}. Readings only, not signals.
               </p>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="mb-2 font-semibold">Data quality (latest load)</h2>
+            <details className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+              <summary className="cursor-pointer font-semibold">Data quality (latest load)</summary>
               {latestRunChecks.length ? (
                 <table className="w-full text-sm">
                   <thead className="text-left text-xs uppercase text-slate-500">
@@ -197,8 +248,8 @@ export default function Dashboard() {
               ) : (
                 <p className="text-sm text-slate-500">No checks recorded yet.</p>
               )}
-            </section>
-          </>
+            </details>
+          </div>
         )}
       </div>
     </main>

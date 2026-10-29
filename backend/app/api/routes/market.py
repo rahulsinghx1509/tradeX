@@ -107,13 +107,16 @@ def overview(session: Session = Depends(get_session)) -> dict:
             .order_by(Instrument.instrument_type.desc(), Instrument.expiry_date)))
         # "index" = the underlying itself: the index, or the stock's cash price.
         index = next((i for i in insts if i.instrument_type in ("INDEX", "STOCK")), None)
-        futures = [i for i in insts if i.instrument_type == "FUTURE"]
+        # F&O view switched off 2026-10-29 (RK: intraday focus, lighter dashboard). Futures are still
+        # collected; uncomment to show them on the cards again.
+        # futures = [i for i in insts if i.instrument_type == "FUTURE"]
         if index:
             spots.append(index)
         underlyings.append({
             "symbol": sym,
             "index": _instrument_summary(session, index, now) if index else None,
-            "futures": [_instrument_summary(session, f, now) for f in futures],
+            # "futures": [_instrument_summary(session, f, now) for f in futures],
+            "futures": [],
             "_spot_id": index.id if index else None,
         })
     # Core metrics (Milestone 2) on the underlying's own daily candles. Information only.
@@ -137,8 +140,8 @@ def overview(session: Session = Depends(get_session)) -> dict:
         # VJ-1.0: the only tested rule. A volatility warning (option selling NO TRADE), not a signal.
         "vix_warning": vix_warning.current(session, settings.data_provider.lower(), now).to_dict(),
         "signal": {"status": "NOT_BUILT",
-                   "message": "Trade signals are not built yet (rule engine comes after "
-                              "core metrics and backtesting)."},
+                   "message": "Intraday signals come after 5-minute data is collected and each "
+                              "setup is tested on past data; they start as PAPER alerts."},
         "underlyings": underlyings,
     }
 
