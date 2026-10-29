@@ -38,6 +38,7 @@ export interface InstrumentSummary extends Instrument {
   previous_close: number | null;
   change: number | null;
   change_pct: number | null;
+  change_reference_close?: number | null;
   open_interest: number | null;
   freshness: Record<string, Freshness>;
   data_quality: "PASS" | "WARN" | "FAIL" | "NO_DATA";
@@ -128,6 +129,38 @@ export interface QualityCheck {
   checked_at: string;
 }
 
+// Intraday chart levels (backend/app/api/routes/intraday.py). Readings only, not signals.
+export interface IntradayLevels {
+  prev_high: number | null;
+  prev_low: number | null;
+  prev_close: number | null;
+  pivot: number | null;
+  r1: number | null;
+  r2: number | null;
+  s1: number | null;
+  s2: number | null;
+  cpr_bottom: number | null;
+  cpr_top: number | null;
+  cpr_width_pct: number | null;
+  gap_pct: number | null;
+  prev_atr14: number | null;
+}
+
+export interface IntradayBar {
+  time: string;
+  vwap: number | null;
+  or_high: number | null;
+  or_low: number | null;
+  rvol: number | null;
+}
+
+export interface IntradayResponse {
+  timeframe: string;
+  session: string | null; // IST date of the latest session, "YYYY-MM-DD"
+  levels: IntradayLevels | null;
+  bars: IntradayBar[];
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`API ${path} returned ${res.status}`);
@@ -138,6 +171,8 @@ export const api = {
   overview: () => get<Overview>("/api/market/overview"),
   candles: (instrumentId: number, timeframe: string, limit = 500) =>
     get<CandleResponse>(`/api/candles?instrument_id=${instrumentId}&timeframe=${timeframe}&limit=${limit}`),
+  intraday: (instrumentId: number, timeframe: string, limit = 500) =>
+    get<IntradayResponse>(`/api/intraday?instrument_id=${instrumentId}&timeframe=${timeframe}&limit=${limit}`),
   dataQuality: (instrumentId: number) =>
     get<{ checks: QualityCheck[] }>(`/api/data-quality?instrument_id=${instrumentId}&limit=30`),
 };

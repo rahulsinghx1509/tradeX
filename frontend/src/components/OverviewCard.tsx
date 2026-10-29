@@ -95,10 +95,11 @@ function MetricsPanel({ metrics }: { metrics: CoreMetrics }) {
   );
 }
 
-export default function OverviewCard({ symbol, index, futures, metrics, hourly }: {
+export default function OverviewCard({ symbol, index, metrics, hourly }: {
   symbol: string;
   index: InstrumentSummary | null;
-  futures: InstrumentSummary[];
+  // F&O view switched off 2026-10-29 (RK: intraday focus). Pass `futures` again to restore the table.
+  // futures: InstrumentSummary[];
   metrics: CoreMetrics | null;
   hourly: HourlyMetrics | null;
 }) {
@@ -116,7 +117,9 @@ export default function OverviewCard({ symbol, index, futures, metrics, hourly }
           <p className={`text-sm tabular-nums ${change === null ? "text-slate-500" : up ? "text-emerald-600" : "text-red-600"}`}>
             {change === null ? "No previous close" : `${up ? "+" : ""}${formatNumber(change)} (${formatNumber(index.change_pct)}%) vs previous day close`}
           </p>
-          <p className="mt-1 text-xs text-slate-500">Latest 1h candle: {formatIst(index.latest_price_time)} IST</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Previous close {formatNumber(index.change_reference_close ?? null)} · latest 1h candle {formatIst(index.latest_price_time)} IST
+          </p>
           {index.live_price !== null && (
             <p className="text-xs text-slate-500 tabular-nums">
               {index.live_status === "LIVE" ? "Live" : "Last quote"} {formatNumber(index.live_price)} at {formatIst(index.live_time)} IST
@@ -132,8 +135,15 @@ export default function OverviewCard({ symbol, index, futures, metrics, hourly }
       ) : (
         <p className="mt-2 text-sm text-slate-500">No data loaded yet. Run scripts/backfill_candles.py.</p>
       )}
-      {metrics && metrics.status !== "NO_DATA" && <MetricsPanel metrics={metrics} />}
-      {hourly && hourly.status !== "NO_DATA" && <HourlyPanel hourly={hourly} />}
+      {/* Daily and hourly trend readings are positional context, so they start folded. */}
+      {((metrics && metrics.status !== "NO_DATA") || (hourly && hourly.status !== "NO_DATA")) && (
+        <details className="mt-3 text-sm">
+          <summary className="cursor-pointer text-xs text-slate-500">Daily &amp; hourly trend (context)</summary>
+          {metrics && metrics.status !== "NO_DATA" && <MetricsPanel metrics={metrics} />}
+          {hourly && hourly.status !== "NO_DATA" && <HourlyPanel hourly={hourly} />}
+        </details>
+      )}
+      {/* F&O view switched off 2026-10-29 (RK: intraday focus). Uncomment to show futures again.
       {futures.length > 0 && (
         <table className="mt-4 w-full text-sm">
           <thead className="text-left text-xs uppercase text-slate-500">
@@ -152,6 +162,7 @@ export default function OverviewCard({ symbol, index, futures, metrics, hourly }
           </tbody>
         </table>
       )}
+      */}
     </section>
   );
 }

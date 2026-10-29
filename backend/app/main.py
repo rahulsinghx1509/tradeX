@@ -9,7 +9,7 @@ There are no order-placement endpoints. Version 1 is analysis only.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import candles, data_quality, health, instruments, market
+from app.api.routes import candles, data_quality, health, instruments, intraday, market
 from app.core.config import get_settings
 from app.core.log_setup import setup_logging
 
@@ -23,5 +23,5 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
-for module in (health, instruments, candles, data_quality, market):
+for module in (health, instruments, candles, data_quality, market, intraday):
     app.include_router(module.router)
