@@ -7,6 +7,9 @@ Rules used everywhere in TradeX:
     * 1h candles follow the clock, as Groww serves them: 09:15-10:00 (only 45 minutes),
       then 10:00, 11:00, ... 15:00 (the last one is only 30 minutes long).
     * 1d candles are stored at 09:15 IST of the trading day.
+    * 5m and 15m candles run from 09:15 in fixed steps (09:15, 09:20, ... 15:25 for 5m: 75 bars;
+      09:15 ... 15:15 for 15m: 25 bars). Groww's minute stamps are NOT_VERIFIED
+      (`tradex.sh intraday-probe` shows the first and last bar of a day).
 - A candle is "complete" only after its end time has passed. Incomplete candles
   are never stored, so historical analysis cannot peek into the future.
 """
@@ -22,7 +25,8 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 SESSION_OPEN = time(9, 15)
 SESSION_CLOSE = time(15, 30)
-SUPPORTED_TIMEFRAMES = ("1d", "1h")
+SUPPORTED_TIMEFRAMES = ("1d", "1h", "15m", "5m")
+MINUTE_BARS = {"5m": timedelta(minutes=5), "15m": timedelta(minutes=15)}
 
 HOLIDAYS_FILE = Path(__file__).resolve().parents[1] / "data" / "nse_holidays.csv"
 
@@ -94,6 +98,12 @@ def bar_starts_for_day(d: date, timeframe: str) -> list[datetime]:
             starts.append(t)
             t += timedelta(hours=1)
         return starts
+    if timeframe in MINUTE_BARS:
+        step, starts, t = MINUTE_BARS[timeframe], [], open_utc
+        while t < close_utc:
+            starts.append(t)
+            t += step
+        return starts
     raise ValueError(f"Unsupported timeframe: {timeframe}")
 
 
@@ -110,6 +120,8 @@ def bar_end(bar_start: datetime, timeframe: str) -> datetime:
         return close_utc
     if timeframe == "1h":
         return min(_next_clock_hour(bar_start), close_utc)
+    if timeframe in MINUTE_BARS:
+        return min(bar_start + MINUTE_BARS[timeframe], close_utc)
     raise ValueError(f"Unsupported timeframe: {timeframe}")
 
 

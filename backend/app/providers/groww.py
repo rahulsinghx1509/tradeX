@@ -43,9 +43,12 @@ from app.providers.base import (
 log = logging.getLogger(__name__)
 
 # Values from the SDK "Annexures" page.
-INTERVALS = {"1h": "1hour", "1d": "1day"}
+INTERVALS = {"1h": "1hour", "1d": "1day", "15m": "15minute", "5m": "5minute"}
 # Max time range per candle request (from the backtesting docs): 1h / 1d -> 180 days.
-MAX_WINDOW = {"1h": timedelta(days=180), "1d": timedelta(days=180)}
+# The minute windows are NOT_VERIFIED and kept short on purpose: a short window only costs
+# extra calls, a too-long one fails. `tradex.sh intraday-probe` shows the real limits.
+MAX_WINDOW = {"1h": timedelta(days=180), "1d": timedelta(days=180),
+              "15m": timedelta(days=14), "5m": timedelta(days=7)}
 MIN_SECONDS_BETWEEN_CALLS = 0.15  # stays under the documented 10 requests/second
 # Waits before retrying a call Groww refused with "rate limit" (seconds).
 RATE_LIMIT_BACKOFF = (2, 4, 8, 16)

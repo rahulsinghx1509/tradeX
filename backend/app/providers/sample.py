@@ -19,7 +19,14 @@ from datetime import UTC, date, datetime, timedelta
 import numpy as np
 
 from app.core.market_time import bar_starts_for_day, to_ist, trading_days
-from app.providers.base import Candle, Capability, InstrumentInfo, MarketDataProvider, Snapshot
+from app.providers.base import (
+    Candle,
+    Capability,
+    InstrumentInfo,
+    MarketDataProvider,
+    ProviderError,
+    Snapshot,
+)
 
 ANCHOR = date(2020, 1, 1)
 # Starting levels and lot sizes are illustrative only. Real lot sizes must come
@@ -158,6 +165,8 @@ class SampleProvider(MarketDataProvider):
                 volume, oi = None, None  # indices have no traded volume or OI
             hourly.append(Candle(t, o, h, low, c, volume, oi))
 
+        if timeframe not in ("1h", "1d"):
+            raise ProviderError(f"Sample data has 1h and 1d candles only, not {timeframe}")
         candles = hourly if timeframe == "1h" else _to_daily(hourly)
         return [c for c in candles if start <= c.time <= end]
 
