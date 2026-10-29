@@ -8,7 +8,7 @@ Read these before doing any work:
 
 1. `docs/00_MASTER_PROJECT_BRIEF.md` — the owner's original master brief (scope, architecture, schema, rules).
 2. `docs/01_DECISIONS_AND_CONTEXT.md` — decisions made in planning discussions **after** the brief. Where it differs from the brief, the decisions file wins.
-3. `docs/Futures_Tracking_Sheet.xlsx` — the metric catalog (Metric Dictionary sheet: 67 data metrics; the 14 rule rows were removed 2026-10-28).
+3. `docs/Futures_Tracking_Sheet.xlsx` — the metric catalog (Metric Dictionary sheet: 103 data metrics, 36 of them intraday (added 2026-10-29); the 14 rule rows were removed 2026-10-28).
 
 ## Owner
 
@@ -43,8 +43,12 @@ Read these before doing any work:
 - ✅ PS-1.0 and VS-1.0 run: no edge. No daily rule beat costs (docs/01 §18).
 - 🔀 2026-10-28 RK: **rules are out**. No buy/exit rules, rule studies, paper journal or sizing rules.
   Existing study code and VJ-1.0 stay as they are; nothing new is built on them.
-- 👉 Next: option data points on the dashboard (live chain: strike OI and OI change, PCR, max pain, ATM IV,
-  walls) and live chart reading (charts that update during the day).
+- 🔀 2026-10-29 RK: focus moves to **intraday**, all NIFTY 50 + NIFTY Next 50 stocks (docs/01 §19);
+  36 intraday data points added to the catalog.
+- 🔀 2026-10-29 RK (later): intraday signals are back in scope: data points first, then setups tested on
+  past intraday data, PAPER Telegram signals, real alerts only after RK approves (docs/01 §19). Never orders.
+- 👉 Next: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
+  then collect the 100 stocks and show live intraday charts.
 
 ## Code map
 

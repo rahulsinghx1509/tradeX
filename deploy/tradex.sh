@@ -34,6 +34,7 @@ case "${1:-help}" in
   participant-history) script load_participant_history.py "${@:2}" ;;
   participant-screen) script participant_screen.py "${@:2}" && echo "Report: reports/participant_screen.md" ;;
   sources)    script check_data_sources.py "${@:2}" && echo "Report: reports/data_sources.md" ;;
+  intraday-probe) script intraday_probe.py "${@:2}" && echo "Report: reports/intraday_probe.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
@@ -68,6 +69,7 @@ Usage: deploy/tradex.sh <command>
   participant-history load NSE's daily FII/DII/retail positioning file since 2020 (about 30 minutes)
   participant-screen one-shot screen of FII/DII/retail positioning, development years only (reports/participant_screen.md)
   sources      which free NSE/FRED data files download from here, how far back (reports/data_sources.md)
+  intraday-probe what Groww gives for 1/5/15-min candles + NSE index member lists (reports/intraday_probe.md)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)
   final        one-time final test of variant C on held-back years (reports/final_test.md)
   chat-id      print your Telegram chat ID
