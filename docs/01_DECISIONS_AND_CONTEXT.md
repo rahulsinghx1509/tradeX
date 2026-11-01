@@ -400,3 +400,11 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   profit factor >= 1.05. Nothing re-tuned on the same data.
 - Commands: `tradex.sh straddle-load` (four legs a day, reuses the EMA spot and expiry data),
   then `tradex.sh straddle-backtest`.
+- **Result (RK's server run, 2026-11-01, 2024-11-01 to 2026-10-31, default slippage): FAIL.**
+  379 days traded, 48% winning days, gross +₹83k, friction ₹2.70L (about ₹710 a day: 8 orders,
+  slippage on 4 legs), net −₹1.86L, profit factor 0.65; year 1 −₹1.15L, year 2 −₹72k. 47% of sold
+  legs hit their stop; both legs stopped on 54 days. Skipped: 89 VIX-jump days, 19 without the
+  previous VIX close, 18 without NIFTY data. Charges alone (about ₹230 a day) would roughly cancel
+  the gross edge, so even perfect fills would be about break-even. Per the rules: no held-back
+  test, no re-tuning. NIFTY option selling joins the families with no edge after costs.
+

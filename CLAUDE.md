@@ -52,7 +52,7 @@ Read these before doing any work:
   PAPER Telegram messages) in `backend/app/ema921/`. No real orders.
   First backtest: no edge after costs; 2026-11-01 RK added a 2 x ATR(14) chandelier trailing stop (docs/01 §20).
 - 🔀 2026-11-01 RK: next strategy ST-1.0, the 09:20 hedged short straddle on NIFTY (docs/01 §21),
-  `backend/app/straddle/`. RK runs `tradex.sh straddle-load`, then `straddle-backtest`.
+  `backend/app/straddle/`. Result: FAIL (net −₹1.86L over 2 years, PF 0.65); no held-back test.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
