@@ -51,6 +51,8 @@ Read these before doing any work:
   1-minute loader, Flask trade viewer (`/ema/` on the server) and live PAPER engine (`ema-paper` service,
   PAPER Telegram messages) in `backend/app/ema921/`. No real orders.
   First backtest: no edge after costs; 2026-11-01 RK added a 2 x ATR(14) chandelier trailing stop (docs/01 §20).
+- 🔀 2026-11-01 RK: next strategy ST-1.0, the 09:20 hedged short straddle on NIFTY (docs/01 §21),
+  `backend/app/straddle/`. RK runs `tradex.sh straddle-load`, then `straddle-backtest`.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
@@ -61,6 +63,7 @@ Read these before doing any work:
 - `backend/app/services/` – `ingestion.py` (upserts), `data_quality.py`, `freshness.py`, `collector.py`, `nse_bhavcopy.py` (NSE F&O file).
 - `backend/app/api/routes/` – read-only GET endpoints only. A test fails if a non-GET route appears.
 - `backend/alembic/versions/` – schema migrations. Change models → `alembic revision --autogenerate`.
+- `backend/app/straddle/` – ST-1.0 09:20 hedged short straddle: rules in `__init__.py`, engine, loader (reuses ema921 tables), report.
 - `backend/app/ema921/` – 9/21 EMA options backtest: bars/crosses, costs, engine, metrics, 1m store, Groww loader, probe,
   `web.py` + `static/` Flask trade viewer (GET only; `ema` compose service behind Caddy at `/ema/`).
   `paper.py` re-runs the same engine each minute (`as_of`) and records `paper_trades`; never orders.
