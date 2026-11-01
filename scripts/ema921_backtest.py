@@ -34,7 +34,9 @@ def main() -> int:
     p.add_argument("--start", default="09:30", help="entry window start: 09:30, 10:00 or 10:30")
     p.add_argument("--cutoff", default="14:30", help="entry cutoff: 11:30 ... 14:30")
     p.add_argument("--cross", default="", help="only enter on these crosses of the day, e.g. 1 or 1,2")
-    p.add_argument("--slippage-points", type=float, default=0.5)
+    p.add_argument("--slippage-pct", type=float, default=0.5,
+                   help="slippage per side as a percent of the price (0.5 means 0.5%%)")
+    p.add_argument("--slippage-points", type=float, default=0.5, help="plus these points per side")
     p.add_argument("--capital", type=float, default=100_000)
     p.add_argument("--no-roll", action="store_true", help="trade the same-day expiry on expiry day")
     a = p.parse_args()
@@ -43,7 +45,8 @@ def main() -> int:
     end = date.fromisoformat(a.end_day) if a.end_day else end
     crosses = frozenset(int(x) for x in a.cross.split(",") if x.strip()) or None
     base = dict(start=time.fromisoformat(a.start), cutoff=time.fromisoformat(a.cutoff),
-                cross_numbers=crosses, slippage_points=a.slippage_points, capital=a.capital,
+                cross_numbers=crosses, slippage_pct=a.slippage_pct / 100,
+                slippage_points=a.slippage_points, capital=a.capital,
                 roll_on_expiry_day=not a.no_roll)
 
     with get_sessionmaker()() as session:
