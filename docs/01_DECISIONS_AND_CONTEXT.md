@@ -337,3 +337,23 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Server note: 100 stocks polled every 5 minutes is about 200 Groww calls per cycle (quote + 5-min
   candle). That fits Groww's documented 10 calls/second; the 1 GB server's database growth
   (~7,500 5-min candles a day) is small.
+
+## 20. 9/21 EMA crossover on NIFTY options: backtest, then paper (2026-11-01)
+
+- **RK, 2026-11-01:** shared a Google Doc of build prompts ("9/21 EMA Cross Over - Algo Trading"):
+  Groww setup, a 9/21 EMA NIFTY options backtester with a Flask trade viewer, and a live/paper
+  engine. RK asked for it to be set up inside TradeX.
+- Rules and every settled ambiguity: [rules doc](https://claude.ai/artifact/PiDc6FGqdqS6xnc1z6sZq4)
+  (fill at the next 1-minute option open, tie is not a cross, roll on expiry day, skip on missing
+  data, flat 65 lot, ₹1L capital for drawdown %). Code: `backend/app/ema921/`.
+- One clarification made while building: a cross needs the sign of EMA9 − EMA21 to really flip
+  from the last non-zero side. "Above, tie, above again" is not a new cross.
+- **RK chose (decision card):** backtester + paper trading only. No real orders can be placed;
+  any Groww order code needs a separate approval after paper results and a check of SEBI's
+  retail-algo rules and Groww's requirements.
+- **RK:** test on 2-3 years. Default 2 (`--years 3` if Groww has the history).
+- Order of work: (1) `tradex.sh ema-probe` checks Groww's 1-minute depth for spot and expired
+  options; (2) `ema-load` fetches only the option contracts a trade could need; (3)
+  `ema-backtest` writes the report; then the Flask trade viewer; then the paper engine.
+- Not verified: Groww's "1minute" interval, 1m candles for expired options, candle stamps being
+  start times (the probe checks all three), and every cost rate in `ema921/costs.py`.

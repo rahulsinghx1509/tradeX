@@ -47,7 +47,10 @@ Read these before doing any work:
   36 intraday data points added to the catalog.
 - 🔀 2026-10-29 RK (later): intraday signals are back in scope: data points first, then setups tested on
   past intraday data, PAPER Telegram signals, real alerts only after RK approves (docs/01 §19). Never orders.
-- 👉 Next: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
+- 🔀 2026-11-01 RK: 9/21 EMA crossover on NIFTY weekly options (docs/01 §20). Backtest engine + Groww
+  1-minute loader in `backend/app/ema921/`; then Flask trade viewer, then PAPER engine. No real orders.
+  RK runs `tradex.sh ema-probe`, then `ema-load` (2 years), then `ema-backtest`.
+- 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
 ## Code map
@@ -57,6 +60,7 @@ Read these before doing any work:
 - `backend/app/services/` – `ingestion.py` (upserts), `data_quality.py`, `freshness.py`, `collector.py`, `nse_bhavcopy.py` (NSE F&O file).
 - `backend/app/api/routes/` – read-only GET endpoints only. A test fails if a non-GET route appears.
 - `backend/alembic/versions/` – schema migrations. Change models → `alembic revision --autogenerate`.
+- `backend/app/ema921/` – 9/21 EMA options backtest: bars/crosses, costs, engine, metrics, 1m store, Groww loader, probe.
 - `scripts/` – backfill, collector, Telegram helpers, Groww capability check.
 - `deploy/` – server Docker Compose (db, migrate, api, collector, dashboard, caddy), `tradex.sh` everyday commands,
   setup, nightly backup and 5-minute auto-update from `main`. Merging to `main` deploys to the server.
