@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime, timedelta
 
 import pandas as pd
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 from app.core.market_time import from_db, to_ist
 from app.db.models import MinuteCandle, MinuteFetch, OptionContract
 from app.providers.base import Candle
+
+log = logging.getLogger(__name__)
 
 SPOT_SYMBOL = "NSE-NIFTY"
 UNDERLYING = "NIFTY"
@@ -48,10 +51,27 @@ def record_fetch(session: Session, symbol: str, day: date, rows: int, status: st
 
 
 def save_minutes(session: Session, symbol: str, day: date, candles: list[Candle]) -> int:
-    """Upsert one day of 1-minute candles. Missing values stay NULL."""
+    """Upsert one day of 1-minute candles. Missing values stay NULL.
+
+    Groww sometimes sends every candle of a day twice (seen 2026-11-01 for an option: 752
+    candles instead of 376). One row per minute is kept: the last one sent. If two copies of a
+    minute disagree, a warning is logged with how many minutes differed.
+    """
+    by_time: dict = {}
+    conflicts = 0
+    for c in candles:
+        if to_ist(c.time).date() != day:
+            continue
+        old = by_time.get(c.time)
+        if old is not None and (old.open, old.high, old.low, old.close) != (c.open, c.high, c.low, c.close):
+            conflicts += 1
+        by_time[c.time] = c
+    if conflicts:
+        log.warning("%s %s: %d minutes came twice with different prices; kept the last copy",
+                    symbol, day, conflicts)
     rows = [dict(groww_symbol=symbol, trade_date=day, candle_time=c.time, open=c.open, high=c.high,
                  low=c.low, close=c.close, volume=c.volume, open_interest=c.open_interest)
-            for c in candles if to_ist(c.time).date() == day]
+            for c in by_time.values()]
     if rows:
         ins = _insert(session)(MinuteCandle)
         for i in range(0, len(rows), 500):
