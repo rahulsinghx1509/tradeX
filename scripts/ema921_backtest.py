@@ -37,6 +37,8 @@ def main() -> int:
     p.add_argument("--slippage-pct", type=float, default=0.5,
                    help="slippage per side as a percent of the price (0.5 means 0.5%%)")
     p.add_argument("--slippage-points", type=float, default=0.5, help="plus these points per side")
+    p.add_argument("--stop-atr", type=float, default=2.0,
+                   help="trailing stop distance in ATR(14) of the signal bars; 0 turns it off")
     p.add_argument("--capital", type=float, default=100_000)
     p.add_argument("--no-roll", action="store_true", help="trade the same-day expiry on expiry day")
     a = p.parse_args()
@@ -47,6 +49,7 @@ def main() -> int:
     base = dict(start=time.fromisoformat(a.start), cutoff=time.fromisoformat(a.cutoff),
                 cross_numbers=crosses, slippage_pct=a.slippage_pct / 100,
                 slippage_points=a.slippage_points, capital=a.capital,
+                stop_atr_mult=a.stop_atr or None,
                 roll_on_expiry_day=not a.no_roll)
 
     with get_sessionmaker()() as session:

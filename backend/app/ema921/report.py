@@ -29,6 +29,9 @@ def to_markdown(results: list[E.Result], start: date, end: date) -> str:
         f"{cfg0.square_off:%H:%M}. 1 lot of {cfg0.lot_size}. Slippage {cfg0.slippage_pct * 100:g}% + "
         f"{cfg0.slippage_points:g} pts a side. Costs: brokerage, STT, exchange, SEBI, stamp, GST "
         "(rates NOT_VERIFIED). Drawdown % on ₹{:,.0f} starting capital.".format(cfg0.capital),
+        "", (f"Trailing stop: chandelier on NIFTY spot, {cfg0.stop_atr_mult:g} x ATR({cfg0.atr_period}) "
+             "of the signal bars from the best price since entry." if cfg0.stop_atr_mult
+             else "Trailing stop: off (exits only on the opposite cross or at square-off)."),
         "", "Rules: https://claude.ai/artifact/PiDc6FGqdqS6xnc1z6sZq4", "",
         "| Bars | Mode | Trades | Win % | Gross | Friction | Net | Profit factor | Payoff | "
         "Expectancy | Max DD | Max DD % | Worst trade | Worst open loss | Whipsaws |",

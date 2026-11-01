@@ -55,6 +55,8 @@ def main() -> int:
     p.add_argument("--cutoff", default="14:30")
     p.add_argument("--cross", default="", help="only enter on these crosses of the day, e.g. 1 or 1,2")
     p.add_argument("--modes", default="all", help="all, or e.g. ATM_BUY,ATM_SELL")
+    p.add_argument("--stop-atr", type=float, default=2.0,
+                   help="trailing stop distance in ATR(14) of the signal bars; 0 turns it off")
     p.add_argument("--once", action="store_true")
     a = p.parse_args()
     modes = E.MODES if a.modes.strip().lower() == "all" else tuple(
@@ -66,7 +68,8 @@ def main() -> int:
     if start not in E.START_CHOICES or cutoff not in E.CUTOFF_CHOICES:
         p.error("start must be 09:30/10:00/10:30 and cutoff 11:30 ... 14:30 (half hours)")
     crosses = frozenset(int(x) for x in a.cross.split(",") if x.strip()) or None
-    cfg = E.Config(timeframe=a.tf, start=start, cutoff=cutoff, cross_numbers=crosses)
+    cfg = E.Config(timeframe=a.tf, start=start, cutoff=cutoff, cross_numbers=crosses,
+                   stop_atr_mult=a.stop_atr or None)
 
     if os.environ.get("EMA921_PAPER_OFF", "").strip() in ("1", "true", "yes"):
         log.info("EMA921_PAPER_OFF is set: the paper engine stays idle.")

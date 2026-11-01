@@ -131,7 +131,7 @@ def entry_message(tf: int, items: list[E.Trade]) -> str:
 
 def exit_message(tf: int, items: list[E.Trade]) -> str:
     first = items[0]
-    why = "15:00 square-off" if first.exit_reason == "SQUARE_OFF" else "opposite cross"
+    why = E.EXIT_LABELS.get(first.exit_reason, first.exit_reason)
     lines = [f"🧪 PAPER · 9/21 EMA {tf}m · EXIT at {_hm(first.exit_time)} ({why})"]
     for t in items:
         stale = " · STALE price" if t.stale_exit else ""

@@ -50,7 +50,7 @@ Read these before doing any work:
 - 🔀 2026-11-01 RK: 9/21 EMA crossover on NIFTY weekly options (docs/01 §20). Backtest engine, Groww
   1-minute loader, Flask trade viewer (`/ema/` on the server) and live PAPER engine (`ema-paper` service,
   PAPER Telegram messages) in `backend/app/ema921/`. No real orders.
-  RK runs `tradex.sh ema-probe`, then `ema-load` (2 years), then `ema-backtest`.
+  First backtest: no edge after costs; 2026-11-01 RK added a 2 x ATR(14) chandelier trailing stop (docs/01 §20).
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 

@@ -246,8 +246,8 @@ def create_app(backtests: Backtests) -> Flask:
         opt = backtests._options.minutes(t.symbol, t.day) if backtests._options else None
         opt = opt if opt is not None else pd.DataFrame(columns=["time", "open", "high", "low", "close"])
         signal_bar = day[day["bar_close"] == pd.Timestamp(t.signal_time)]
-        exit_bar = day[day["bar_close"] == pd.Timestamp(t.exit_time)] if t.exit_reason == \
-            "OPPOSITE_CROSS" else day[day["bar_start"] <= pd.Timestamp(t.exit_time)].tail(1)
+        exit_bar = day[day["bar_close"] == pd.Timestamp(t.exit_time)] if t.exit_reason != \
+            "SQUARE_OFF" else day[day["bar_start"] <= pd.Timestamp(t.exit_time)].tail(1)
         markers = []
         if len(signal_bar):
             markers.append({"time": _chart_time(signal_bar["bar_start"].iloc[0]),
