@@ -51,6 +51,11 @@ def _span(candles) -> tuple[str, str]:
     return f"{to_ist(candles[0].time):%H:%M}", f"{to_ist(candles[-1].time):%H:%M}"
 
 
+def _step(strikes: list[float]) -> str:
+    gaps = sorted({round(b - a, 2) for a, b in zip(strikes, strikes[1:], strict=False)})
+    return "/".join(f"{g:g}" for g in gaps[:3]) or "-"
+
+
 def _expiries_around(client: Any, day: date) -> list[date]:
     out: set[date] = set()
     for y, m in L._months(day, day + timedelta(days=31)):
@@ -84,7 +89,11 @@ def probe_age(client: Any, today: date, age: int) -> Row:
         strike = E.atm_strike(closes[len(closes) // 2])
         match = [c for c in contracts if L.parse_contract(c) == (strike, "CE")]
         if not match:
-            row.note = f"no {strike:g} CE among {len(contracts)} contracts"
+            strikes = sorted({k for c in contracts if (p := L.parse_contract(c)) for k in [p[0]]})
+            span = (f"strikes {strikes[0]:g}-{strikes[-1]:g}, step {_step(strikes)}"
+                    if strikes else "no strikes")
+            row.note = (f"no {strike:g} CE among {len(contracts)} contracts "
+                        f"({span}, spot {closes[len(closes) // 2]:g})")
             return row
         row.contract = str(match[0])
         opt = L.fetch_day(client, row.contract, "FNO", row.day)
@@ -102,7 +111,8 @@ def run(client: Any, today: date) -> list[Row]:
 def to_markdown(rows: list[Row], today: date) -> str:
     lines = ["# Groww 1-minute history probe (9/21 EMA backtest)", "",
              f"Run {today}. One trading day per age. Counts and times (IST) only, no prices. "
-             "A full day has 375 one-minute candles (09:15 to 15:29).", "",
+             "A full day has 375 one-minute candles (09:15 to 15:29); Groww also sends a 15:30 one, "
+             "which the engine ignores.", "",
              "| Age (days) | Day | Spot 1m | First | Last | Expiry used | ATM call | Option 1m | "
              "First | Last | Note |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:

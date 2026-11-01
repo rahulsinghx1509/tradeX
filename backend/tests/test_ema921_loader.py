@@ -148,3 +148,15 @@ def test_probe_report():
     assert rows[0].spot_first == "09:15" and rows[0].contract.endswith("-CE")
     md = P.to_markdown(rows, date(2026, 10, 20))
     assert "Oldest age with expired-option 1m: 1095 days" in md
+
+
+def test_duplicate_candles_from_groww_are_stored_once(session):
+    class Twice(FakeGroww):
+        def get_historical_candles(self, **kw):
+            body = super().get_historical_candles(**kw)
+            return {"candles": body["candles"] + body["candles"]}
+
+    rep = L.LoadReport()
+    L.load_spot(session, Twice(), END, END, rep, log=lambda _: None)
+    assert not rep.errors
+    assert len(S.load_minutes(session, S.SPOT_SYMBOL, END, END)) == 375
