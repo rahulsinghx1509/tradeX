@@ -7,7 +7,11 @@ Walk-through for one trading day and one mode:
 1. Take that day's EMA crosses (closing before 15:00).
 2. A cross with a trade open closes it (opposite cross). If the cross is inside the entry
    window (and passes the cross-number filter), a new trade opens in its direction.
-3. Whatever is still open is squared off at 15:00.
+3. Trailing stop (added 2026-11-01, on by default): a chandelier stop on NIFTY spot, checked on
+   each closed signal bar. Long: stop = highest high since entry - 2 x ATR(14); short: lowest
+   low + 2 x ATR(14). The stop only ever tightens. A bar closing beyond it exits the trade at the
+   option's open of the next minute (TRAIL_STOP); the engine then waits for the next cross.
+4. Whatever is still open is squared off at 15:00.
 Prices come from the option's own 1-minute candles: the open of the minute the signal bar
 closes (#1). Missing data is never filled with zero: an entry without a price is skipped
 (NO_DATA, #11); an exit without a price uses the last known price and is flagged (#12).
@@ -28,6 +32,8 @@ from app.ema921 import costs as C
 
 MODES = ("ITM_BUY", "ATM_BUY", "ATM_SELL")
 MODE_LABELS = {"ITM_BUY": "Deep ITM buy", "ATM_BUY": "ATM buy", "ATM_SELL": "ATM sell"}
+EXIT_LABELS = {"OPPOSITE_CROSS": "opposite cross", "TRAIL_STOP": "trailing stop",
+               "SQUARE_OFF": "15:00 square-off"}
 START_CHOICES = (time(9, 30), time(10, 0), time(10, 30))
 CUTOFF_CHOICES = tuple(time(h, m) for h, m in
                        [(11, 30), (12, 0), (12, 30), (13, 0), (13, 30), (14, 0), (14, 30)])
@@ -51,6 +57,8 @@ class Config:
     max_missing_spot_minutes: int = 0  # (#13)
     capital: float = 100_000.0  # for drawdown % only (#18)
     whipsaw_bars: int = 2  # (#19)
+    stop_atr_mult: float | None = 2.0  # chandelier trailing stop on spot; None or 0 = off
+    atr_period: int = 14
 
     @property
     def qty(self) -> int:
@@ -87,7 +95,7 @@ class Trade:
     exit_time: datetime | None = None
     exit_price: float | None = None
     exit_fill: float | None = None
-    exit_reason: str | None = None  # OPPOSITE_CROSS / SQUARE_OFF
+    exit_reason: str | None = None  # OPPOSITE_CROSS / TRAIL_STOP / SQUARE_OFF
     nifty_exit: float | None = None
     stale_exit: bool = False
     bars_held: int = 0
@@ -241,9 +249,13 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
     1-minute candle may still arrive is left pending (not skipped), and a trade that is still
     running is returned with exit_time None. The backtest leaves it None.
     """
-    signal_bars = B.add_emas(B.resample(spot, cfg.timeframe))
+    signal_bars = B.add_atr(B.add_emas(B.resample(spot, cfg.timeframe)), cfg.atr_period)
     if as_of is not None:
         signal_bars = signal_bars[signal_bars["bar_close"] <= as_of].reset_index(drop=True)
+    bars_by_day: dict[date, list[_Bar]] = {}
+    for r in signal_bars.itertuples(index=False):
+        bars_by_day.setdefault(r.day, []).append(
+            _Bar(r.bar_close, float(r.high), float(r.low), float(r.close), float(r.atr)))
     all_crosses = B.crosses(signal_bars)
     days, why = no_trade_days(spot, start, end, cfg, holidays, as_of)
     by_day: dict[date, list[B.Cross]] = {}
@@ -267,7 +279,7 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
         made = 0
         for mode in modes:
             day_trades = _run_day(mode, d, crosses_today, options, expiries, cfg, minutes,
-                                  skips, bar_index, spot_px, as_of)
+                                  skips, bar_index, spot_px, as_of, bars_by_day.get(d, []))
             trades[mode].extend(day_trades)
             made += len(day_trades)
         if not made:
@@ -304,16 +316,78 @@ class _SpotPrices:
         return float(self.closes[i - 1]) if i > 0 else None
 
 
+@dataclass(frozen=True)
+class _Bar:
+    close_time: pd.Timestamp  # IST
+    high: float
+    low: float
+    close: float
+    atr: float
+
+
+def _stop_hit(tr: Trade, bars: list[_Bar], before: pd.Timestamp, cfg: Config) -> _Bar | None:
+    """First signal bar after entry and before `before` that closes beyond the chandelier stop.
+
+    Long: stop = highest high since entry - k x ATR, raised only. Short: the mirror image.
+    The entry (signal) bar seeds the extreme; checking starts with the next bar."""
+    k = cfg.stop_atr_mult
+    if not k:
+        return None
+    entry = pd.Timestamp(tr.signal_time)
+    seed = [b for b in bars if b.close_time == entry]
+    if not seed or pd.isna(seed[0].atr):
+        return None
+    long = tr.direction > 0
+    extreme = seed[0].high if long else seed[0].low
+    stop = extreme - k * seed[0].atr if long else extreme + k * seed[0].atr
+    for b in bars:
+        if b.close_time <= entry:
+            continue
+        if b.close_time >= before:
+            break
+        if pd.isna(b.atr):
+            continue
+        if long:
+            extreme = max(extreme, b.high)
+            stop = max(stop, extreme - k * b.atr)
+            if b.close < stop:
+                return b
+        else:
+            extreme = min(extreme, b.low)
+            stop = min(stop, extreme + k * b.atr)
+            if b.close > stop:
+                return b
+    return None
+
+
 def _pending(as_of: pd.Timestamp | None, t: pd.Timestamp, cfg: Config) -> bool:
     """Live only: the fill candle for minute t may still arrive."""
     return as_of is not None and as_of < t + timedelta(minutes=cfg.fill_grace_minutes)
 
 
 def _run_day(mode, d, crosses_today, options, expiries, cfg, minutes, skips, bar_index,
-             spot, as_of=None) -> list[Trade]:
+             spot, as_of=None, day_bars: list[_Bar] | None = None) -> list[Trade]:
     out: list[Trade] = []
     open_trade: Trade | None = None
+    day_bars = day_bars or []
+
+    def stop_out(before: pd.Timestamp) -> bool | None:
+        """Close the open trade if its trailing stop was hit before `before`.
+        None: no hit. True: closed. False: live, exit candle not in yet."""
+        hit = _stop_hit(open_trade, day_bars, before, cfg)
+        if hit is None:
+            return None
+        return _close(open_trade, hit.close_time, "TRAIL_STOP", hit.close, cfg, minutes,
+                      bar_index, as_of)
+
     for c in crosses_today:
+        if open_trade is not None:
+            stopped = stop_out(c.bar_close)
+            if stopped is not None:
+                out.append(open_trade)
+                open_trade = None
+                if not stopped:
+                    return out
         if open_trade is not None:
             closed = _close(open_trade, c.bar_close, "OPPOSITE_CROSS", c.spot, cfg, minutes,
                             bar_index, as_of)
@@ -325,6 +399,10 @@ def _run_day(mode, d, crosses_today, options, expiries, cfg, minutes, skips, bar
             open_trade = _open(mode, d, c, options, expiries, cfg, minutes, skips, as_of)
     if open_trade is not None:
         t = _ist(d, cfg.square_off)
+        stopped = stop_out(t)
+        if stopped is not None:
+            out.append(open_trade)
+            return out
         if as_of is None or as_of >= t:
             _close(open_trade, t, "SQUARE_OFF", spot.at(t), cfg, minutes, bar_index, as_of)
         out.append(open_trade)
@@ -381,10 +459,10 @@ def _close(tr: Trade, at: pd.Timestamp, reason: str, nifty: float | None, cfg: C
     tr.charges = C.charges(buy_px * q, sell_px * q, tr.day)
     tr.net_pnl = round(filled - tr.charges["total"], 2)
     entry_bar = bar_index.get(pd.Timestamp(tr.signal_time))
-    exit_bar = bar_index.get(at) if reason == "OPPOSITE_CROSS" else None
+    exit_bar = bar_index.get(at) if reason != "SQUARE_OFF" else None
     if entry_bar is not None and exit_bar is not None:
         tr.bars_held = exit_bar - entry_bar
-        tr.whipsaw = tr.bars_held <= cfg.whipsaw_bars
+        tr.whipsaw = reason == "OPPOSITE_CROSS" and tr.bars_held <= cfg.whipsaw_bars
     elif entry_bar is not None:
         tr.bars_held = int((at - pd.Timestamp(tr.signal_time)).total_seconds() // (60 * cfg.timeframe))
     worst = m.extreme(pd.Timestamp(tr.entry_time), t, worst_high=tr.side == "SELL")

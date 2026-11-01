@@ -68,6 +68,20 @@ def add_emas(bars: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def add_atr(bars: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """Wilder's ATR(n) of the bars, running continuously across days like the EMAs.
+
+    True range = the largest of high-low, |high - previous close|, |low - previous close|.
+    Wilder smoothing is an EMA with alpha = 1/n. Like a SQL running aggregate over the bars.
+    """
+    out = bars.copy()
+    h, lo = out["high"].astype(float), out["low"].astype(float)
+    prev = out["close"].astype(float).shift(1)
+    tr = pd.concat([h - lo, (h - prev).abs(), (lo - prev).abs()], axis=1).max(axis=1)
+    out["atr"] = tr.ewm(alpha=1 / n, adjust=False).mean()
+    return out
+
+
 @dataclass(frozen=True)
 class Cross:
     day: date

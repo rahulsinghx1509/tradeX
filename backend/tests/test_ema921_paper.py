@@ -82,6 +82,7 @@ def test_paper_day_matches_the_backtest(session):
                        for t in bt.trades[m])
     got = sorted((r.mode, float(r.entry_price), float(r.exit_price), float(r.net_pnl)) for r in rows)
     assert got == expected
+    assert {r.exit_reason for r in rows} >= {"TRAIL_STOP"}  # stops run live exactly as in the backtest
 
     entries = [m for m in notes.sent if "ENTRY" in m]
     exits = [m for m in notes.sent if "EXIT" in m]

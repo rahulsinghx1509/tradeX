@@ -179,7 +179,7 @@ def _run(spot, opts, cfg=None, modes=E.MODES):
 
 def test_round_trip_with_reversal_and_square_off():
     spot = spot_frame((WARM, flat), (DAY, up_then_down))
-    res = _run(spot, FakeOptions(spot), E.Config(timeframe=5))
+    res = _run(spot, FakeOptions(spot), E.Config(timeframe=5, stop_atr_mult=None))
     atm = res.trades["ATM_BUY"]
     assert [t.direction for t in atm] == [1, -1]
     long, short = atm
@@ -211,10 +211,64 @@ def test_pnl_parts_add_up():
 
 def test_cutoff_blocks_entries_but_not_exits():
     spot = spot_frame((WARM, flat), (DAY, up_then_down))
-    res = _run(spot, FakeOptions(spot), E.Config(cutoff=time(11, 30)), modes=("ATM_BUY",))
+    res = _run(spot, FakeOptions(spot), E.Config(cutoff=time(11, 30), stop_atr_mult=None),
+               modes=("ATM_BUY",))
     trades = res.trades["ATM_BUY"]
     assert len(trades) == 1  # the bearish cross after 11:30 only closes the long
     assert trades[0].exit_reason == "OPPOSITE_CROSS"
+
+
+def test_trailing_stop_exits_before_the_opposite_cross():
+    spot = spot_frame((WARM, flat), (DAY, up_then_down))
+    no_stop = _run(spot, FakeOptions(spot), E.Config(stop_atr_mult=None), modes=("ATM_BUY",))
+    res = _run(spot, FakeOptions(spot), E.Config(), modes=("ATM_BUY",))
+    long, short = res.trades["ATM_BUY"]
+    old_long, old_short = no_stop.trades["ATM_BUY"]
+    assert long.exit_reason == "TRAIL_STOP"
+    assert long.signal_time < long.exit_time < old_long.exit_time
+    # The fill is the option's open in the minute the stop bar closes, like an entry.
+    assert long.exit_time.minute % 5 == 0
+    assert long.nifty_exit is not None
+    # After a stop the engine waits for the next cross: the short still opens there.
+    assert short.signal_time == old_short.signal_time and short.direction == -1
+    assert long.net_pnl > old_long.net_pnl  # gave back less of the run-up
+
+
+def _bars(rows):
+    t0 = pd.Timestamp(datetime.combine(DAY, time(10, 0)), tz=IST)
+    return [E._Bar(t0 + timedelta(minutes=5 * i), h, lo, c, a) for i, (h, lo, c, a) in enumerate(rows)]
+
+
+def _trade(direction):
+    t0 = pd.Timestamp(datetime.combine(DAY, time(10, 0)), tz=IST)
+    return E.Trade(mode="ATM_BUY", day=DAY, direction=direction, side="BUY", option_type="CE",
+                   strike=24500, expiry=EXPIRY, dte=7, symbol="X", cross_number=1,
+                   signal_time=t0.to_pydatetime(), entry_time=t0.to_pydatetime(), entry_price=100,
+                   entry_fill=101, nifty_entry=100)
+
+
+def test_chandelier_stop_only_tightens():
+    cfg = E.Config(stop_atr_mult=2.0)
+    end = pd.Timestamp(datetime.combine(DAY, time(15, 0)), tz=IST)
+    # Entry bar high 100, ATR 5 -> stop 90. New high 120 -> stop 110. ATR jumps to 20 but the
+    # stop stays at 110 (never loosens). The close of 109 is below it.
+    bars = _bars([(100, 95, 98, 5), (120, 110, 118, 5), (121, 112, 113, 20), (115, 105, 109, 20)])
+    hit = E._stop_hit(_trade(1), bars, end, cfg)
+    assert hit is bars[3]
+    # Short: mirror image. Entry low 100, ATR 5 -> stop 110; a close of 111 hits it.
+    bars = _bars([(105, 100, 102, 5), (108, 101, 111, 5)])
+    assert E._stop_hit(_trade(-1), bars, end, cfg) is bars[1]
+    # A hit at or after `before` belongs to the cross / square-off at that moment.
+    assert E._stop_hit(_trade(-1), bars, bars[1].close_time, cfg) is None
+    assert E._stop_hit(_trade(-1), bars, end, E.Config(stop_atr_mult=None)) is None
+
+
+def test_atr_is_wilders():
+    b = pd.DataFrame({"high": [10.0, 12, 11], "low": [8.0, 9, 7], "close": [9.0, 11, 8]})
+    atr = B.add_atr(b, n=2)["atr"].tolist()
+    assert atr[0] == 2  # first bar: high - low
+    assert atr[1] == pytest.approx(0.5 * 2 + 0.5 * 3)  # TR = max(3, 3, 0)
+    assert atr[2] == pytest.approx(0.5 * atr[1] + 0.5 * 4)  # TR = max(4, 0, 4)
 
 
 def test_cross_number_filter_applies_to_entries_only():

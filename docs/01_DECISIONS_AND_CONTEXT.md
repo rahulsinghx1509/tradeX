@@ -367,5 +367,16 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   simulated day matches the backtest trade for trade). One Telegram message per signal (all modes),
   marked PAPER, plus a day summary; stale NIFTY data (> 3 minutes) means NO TRADE. Default 5m bars,
   09:30-14:30, all three modes; change with EMA921_PAPER_* in .env, switch off with EMA921_PAPER_OFF=1.
+- First backtest (2026-11-01, 2024-11-01 to 2026-10-31, 5,001 trades): all 9 timeframe x mode
+  combinations lost after costs (profit factor 0.73-0.93). With zero slippage (charges only), 5m was
+  positive (PF 1.06-1.13), 15m about break-even, 30m still negative. 5m breaks even at roughly
+  0.35-0.8 point of slippage a side. The third year (Nov 2023 - Oct 2024) is held back, untouched.
+- **RK, 2026-11-01:** add a standard trailing stop to the rules. Added: a chandelier stop on NIFTY
+  spot, 2 x ATR(14) of the signal bars from the highest high (long) / lowest low (short) since
+  entry, never loosened, checked on each closed signal bar. A close beyond it exits at the next
+  1-minute option open (TRAIL_STOP); no re-entry until the next cross. Same rule for all three
+  modes, on by default in the backtest, viewer and paper engine; `--stop-atr 0` turns it off.
+  The multiplier was chosen before seeing results (2 is the middle of the 1.5-3 range commonly used),
+  not tuned.
 - Not verified (before the probe): Groww's "1minute" interval, 1m candles for expired options, candle stamps being
   start times (the probe checks all three), and every cost rate in `ema921/costs.py`.

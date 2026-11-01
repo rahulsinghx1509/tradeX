@@ -254,14 +254,15 @@ function renderList(data) {
         ${x.whipsaw ? '<span class="badge warn">whipsaw</span>' : ""}${x.stale_exit ? '<span class="badge warn">stale exit</span>' : ""}</div>
       <div class="${cls(x.net_pnl)}"><b>${inr(x.net_pnl)}</b></div>
       <div class="meta">${x.direction === "LONG" ? "▲ Long" : "▼ Short"} · ${x.side} ${x.strike} ${x.option_type} · cross #${x.cross_number}</div>
-      <div class="meta">${x.exit_reason === "SQUARE_OFF" ? "15:00 square-off" : "opposite cross"}</div></div>`).join("");
+      <div class="meta">${EXIT[x.exit_reason] || x.exit_reason || "open"}</div></div>`).join("");
   for (const el of $("rows").children) el.onclick = () => select(Number(el.dataset.i));
 }
+const EXIT = {OPPOSITE_CROSS: "opposite cross", TRAIL_STOP: "trailing stop", SQUARE_OFF: "15:00 square-off"};
 function renderMeta(x) {
   const f = [["Symbol", x.symbol], ["Direction", x.direction === "LONG" ? "▲ Long NIFTY" : "▼ Short NIFTY"],
     ["Leg", `${x.side} ${x.strike} ${x.option_type}`], ["NIFTY entry → exit", `${num(x.nifty_entry?.toFixed(2))} → ${num(x.nifty_exit?.toFixed(2))}`],
     ["Option entry → exit", `${x.entry_price} → ${x.exit_price}`], ["Fills", `${x.entry_fill} → ${x.exit_fill}`],
-    ["Expiry / DTE", `${x.expiry} · ${x.dte}d`], ["Exit reason", x.exit_reason === "SQUARE_OFF" ? "15:00 square-off" : "Opposite cross"],
+    ["Expiry / DTE", `${x.expiry} · ${x.dte}d`], ["Exit reason", EXIT[x.exit_reason] || x.exit_reason || "–"],
     ["Net PnL", `<span class="${cls(x.net_pnl)}">${inr(x.net_pnl)}</span>`],
     ["Worst open loss", inr(x.mae)], ["Badges", (x.whipsaw ? "whipsaw " : "") + (x.stale_exit ? "stale exit" : "") || "–"]];
   $("metabar").innerHTML = f.map(([a, b]) => `<div><span>${a}</span>${b}</div>`).join("");
