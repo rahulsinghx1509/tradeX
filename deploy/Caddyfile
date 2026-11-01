@@ -1,7 +1,13 @@
-# One front door on port 80: the API under /api and /health, the dashboard for everything else.
+# One front door on port 80: the API under /api and /health, the 9/21 EMA viewer under /ema/,
+# the dashboard for everything else.
 # The server's firewall keeps port 80 closed to the internet; you reach it through Tailscale,
 # which encrypts the connection end to end.
 :80 {
+	# The 9/21 EMA trade viewer. Its page uses relative links, so it works under /ema/.
+	redir /ema /ema/
+	handle_path /ema/* {
+		reverse_proxy ema:8050
+	}
 	@api path /api/* /health /docs /openapi.json
 	handle @api {
 		reverse_proxy api:8000

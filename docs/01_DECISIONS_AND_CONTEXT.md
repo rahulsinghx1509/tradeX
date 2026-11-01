@@ -355,5 +355,8 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Order of work: (1) `tradex.sh ema-probe` checks Groww's 1-minute depth for spot and expired
   options; (2) `ema-load` fetches only the option contracts a trade could need; (3)
   `ema-backtest` writes the report; then the Flask trade viewer; then the paper engine.
+- Trade viewer: Flask (as RK's doc asks), served by waitress as the `ema` service at `http://<server>/ema/`.
+  GET only, computes a filter combination on first view and caches it. Chart library: TradingView
+  Lightweight Charts 4.2.3 (Apache 2.0), copied into the repo so the page needs no CDN.
 - Not verified: Groww's "1minute" interval, 1m candles for expired options, candle stamps being
   start times (the probe checks all three), and every cost rate in `ema921/costs.py`.
