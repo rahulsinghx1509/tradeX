@@ -203,9 +203,16 @@ def _ist(d: date, t: time) -> pd.Timestamp:
 
 # ----------------------------------------------------------------------------- the run
 def no_trade_days(spot: pd.DataFrame, start: date, end: date, cfg: Config,
-                  holidays: frozenset[date] | None = None) -> tuple[list[date], dict[date, str]]:
-    """(tradable days, {day: reason}) for every weekday in [start, end] (#13)."""
+                  holidays: frozenset[date] | None = None,
+                  as_of: pd.Timestamp | None = None) -> tuple[list[date], dict[date, str]]:
+    """(tradable days, {day: reason}) for every weekday in [start, end] (#13).
+    Live (`as_of`): today only has to be complete up to the last closed minute."""
     missing = B.complete_days(spot)
+    if as_of is not None and as_of.date() in missing:
+        today = as_of.date()
+        elapsed = int((as_of - _ist(today, B.OPEN)).total_seconds() // 60)
+        expected = max(0, min(B.SESSION_MINUTES, elapsed))
+        missing[today] = max(0, expected - (B.SESSION_MINUTES - missing[today]))
     ok, why = [], {}
     d = start
     while d <= end:
@@ -225,12 +232,20 @@ def no_trade_days(spot: pd.DataFrame, start: date, end: date, cfg: Config,
 
 
 def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Config,
-        modes: tuple[str, ...] = MODES, holidays: frozenset[date] | None = None) -> Result:
+        modes: tuple[str, ...] = MODES, holidays: frozenset[date] | None = None,
+        as_of: pd.Timestamp | None = None) -> Result:
     """Backtest [start, end]. `spot` should also hold some days BEFORE `start` so the EMAs are
-    warmed up (#3); those days are never traded."""
+    warmed up (#3); those days are never traded.
+
+    `as_of` is for the live paper engine: only bars that have closed by then count, a fill whose
+    1-minute candle may still arrive is left pending (not skipped), and a trade that is still
+    running is returned with exit_time None. The backtest leaves it None.
+    """
     signal_bars = B.add_emas(B.resample(spot, cfg.timeframe))
+    if as_of is not None:
+        signal_bars = signal_bars[signal_bars["bar_close"] <= as_of].reset_index(drop=True)
     all_crosses = B.crosses(signal_bars)
-    days, why = no_trade_days(spot, start, end, cfg, holidays)
+    days, why = no_trade_days(spot, start, end, cfg, holidays, as_of)
     by_day: dict[date, list[B.Cross]] = {}
     for c in all_crosses:
         by_day.setdefault(c.day, []).append(c)
@@ -252,7 +267,7 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
         made = 0
         for mode in modes:
             day_trades = _run_day(mode, d, crosses_today, options, expiries, cfg, minutes,
-                                  skips, bar_index, spot_px)
+                                  skips, bar_index, spot_px, as_of)
             trades[mode].extend(day_trades)
             made += len(day_trades)
         if not made:
@@ -289,25 +304,34 @@ class _SpotPrices:
         return float(self.closes[i - 1]) if i > 0 else None
 
 
+def _pending(as_of: pd.Timestamp | None, t: pd.Timestamp, cfg: Config) -> bool:
+    """Live only: the fill candle for minute t may still arrive."""
+    return as_of is not None and as_of < t + timedelta(minutes=cfg.fill_grace_minutes)
+
+
 def _run_day(mode, d, crosses_today, options, expiries, cfg, minutes, skips, bar_index,
-             spot) -> list[Trade]:
+             spot, as_of=None) -> list[Trade]:
     out: list[Trade] = []
     open_trade: Trade | None = None
     for c in crosses_today:
         if open_trade is not None:
-            _close(open_trade, c.bar_close, "OPPOSITE_CROSS", c.spot, cfg, minutes, bar_index)
+            closed = _close(open_trade, c.bar_close, "OPPOSITE_CROSS", c.spot, cfg, minutes,
+                            bar_index, as_of)
             out.append(open_trade)
             open_trade = None
+            if not closed:  # exit still waiting for its candle; nothing later is known yet
+                return out
         if _entry_allowed(c, cfg):
-            open_trade = _open(mode, d, c, options, expiries, cfg, minutes, skips)
+            open_trade = _open(mode, d, c, options, expiries, cfg, minutes, skips, as_of)
     if open_trade is not None:
         t = _ist(d, cfg.square_off)
-        _close(open_trade, t, "SQUARE_OFF", spot.at(t), cfg, minutes, bar_index)
+        if as_of is None or as_of >= t:
+            _close(open_trade, t, "SQUARE_OFF", spot.at(t), cfg, minutes, bar_index, as_of)
         out.append(open_trade)
     return out
 
 
-def _open(mode, d, c: B.Cross, options, expiries, cfg, minutes, skips) -> Trade | None:
+def _open(mode, d, c: B.Cross, options, expiries, cfg, minutes, skips, as_of=None) -> Trade | None:
     side, opt, strike = leg_for(mode, c.direction, c.spot, cfg)
     expiry = pick_expiry(d, expiries, cfg.roll_on_expiry_day)
     if expiry is None:
@@ -319,7 +343,8 @@ def _open(mode, d, c: B.Cross, options, expiries, cfg, minutes, skips) -> Trade 
         return None
     hit = minutes(symbol, d).open_at(c.bar_close, cfg.fill_grace_minutes)
     if hit is None:
-        skips.append(Skip(mode, d, c.bar_close, "NO_DATA", symbol))
+        if not _pending(as_of, c.bar_close, cfg):
+            skips.append(Skip(mode, d, c.bar_close, "NO_DATA", symbol))
         return None
     t, price = hit
     fill = (C.buy_fill if side == "BUY" else C.sell_fill)(price, cfg.slippage_pct, cfg.slippage_points)
@@ -330,9 +355,12 @@ def _open(mode, d, c: B.Cross, options, expiries, cfg, minutes, skips) -> Trade 
 
 
 def _close(tr: Trade, at: pd.Timestamp, reason: str, nifty: float | None, cfg: Config, minutes,
-           bar_index) -> None:
+           bar_index, as_of=None) -> bool:
+    """Fill the exit. False (trade left open) only live, while the exit candle may still arrive."""
     m = minutes(tr.symbol, tr.day)
     hit = m.open_at(at, cfg.fill_grace_minutes)
+    if hit is None and _pending(as_of, at, cfg):
+        return False
     if hit is None:
         hit = m.last_before(at)
         tr.stale_exit = True
@@ -362,3 +390,4 @@ def _close(tr: Trade, at: pd.Timestamp, reason: str, nifty: float | None, cfg: C
     worst = m.extreme(pd.Timestamp(tr.entry_time), t, worst_high=tr.side == "SELL")
     if worst is not None:
         tr.mae = round(min(0.0, sign * (worst - tr.entry_price) * q), 2)
+    return True
