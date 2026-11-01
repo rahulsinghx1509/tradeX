@@ -380,3 +380,23 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   not tuned.
 - Not verified (before the probe): Groww's "1minute" interval, 1m candles for expired options, candle stamps being
   start times (the probe checks all three), and every cost rate in `ema921/costs.py`.
+
+## 21. ST-1.0: 09:20 hedged short straddle on NIFTY (2026-11-01)
+
+- **RK, 2026-11-01:** wants strategies that take small profits ("less than 5% is also ok").
+  Options offered: 09:20 hedged short straddle, opening-range breakout, cash-and-carry.
+  **RK chose (decision card):** the 09:20 hedged short straddle. Backtest only, no orders.
+- Why this one: OS-1.0 found NIFTY options usually overpriced (realised below implied on 59-74%
+  of days). Caution recorded: VS-1.0 (monthly protected selling, held to expiry) was about
+  break-even, so the odds are not high.
+- Rules fixed before any result (full text in `backend/app/straddle/__init__.py`): skip VIX-jump
+  days (VJ-1.0) and days without the previous VIX close; nearest weekly expiry, roll on expiry
+  day; ATM from NIFTY's 09:19 close; sell ATM CE + PE, buy CE +500 and PE -500 at the 09:20
+  one-minute open; 30% stop on each sold leg, on the 1-minute high, filled at the stop or the
+  gap open; everything else closed at the 15:15 open; 65 a leg; slippage 0.5% + 0.5 point a
+  side plus the full cost stack.
+- Pass bar (default slippage, 2 development years): net > 0, profit factor >= 1.10, each year
+  net > 0. Only then one check on the held-back year (Nov 2023 - Oct 2024): net > 0 and
+  profit factor >= 1.05. Nothing re-tuned on the same data.
+- Commands: `tradex.sh straddle-load` (four legs a day, reuses the EMA spot and expiry data),
+  then `tradex.sh straddle-backtest`.
