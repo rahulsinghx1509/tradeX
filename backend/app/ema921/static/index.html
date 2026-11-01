@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>9/21 EMA · NIFTY options backtest</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171b21; --panel2: #1e232b; --line: #2a313b; --text: #e6e9ee;
+    --muted: #8b94a3; --accent: #4c8dff; --up: #22a06b; --down: #e5484d; --warn: #d9a400;
+    --ema9: #4c8dff; --ema21: #f2a33a; --radius: 10px;
+  }
+  [data-theme="light"] {
+    --bg: #f5f6f8; --panel: #ffffff; --panel2: #f0f2f5; --line: #dde1e7; --text: #1b1f24;
+    --muted: #5f6b7a; --accent: #2563eb; --up: #138a55; --down: #cf2f36; --warn: #9a7400;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .range { color: var(--muted); }
+  header .spacer { flex: 1; }
+  button, select { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  button:hover, select:hover { border-color: var(--accent); }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 18px; align-items: end; }
+  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: var(--panel2); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; padding: 0 18px 12px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+  .kpi .k { font-size: 12px; color: var(--muted); }
+  .kpi .v { font-size: 20px; font-weight: 600; margin-top: 2px; }
+  .pos { color: var(--up); } .neg { color: var(--down); }
+  .compare { padding: 0 18px 12px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .compare table { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .compare tr.current td { background: var(--panel2); font-weight: 600; }
+  main { display: grid; grid-template-columns: 360px 1fr; gap: 12px; padding: 0 18px 18px; min-height: 520px; }
+  .list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+    display: flex; flex-direction: column; max-height: calc(100vh - 140px); }
+  .list .head { padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .list .rows { overflow-y: auto; flex: 1; outline: none; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 12px;
+    border-bottom: 1px solid var(--line); cursor: pointer; }
+  .row:hover { background: var(--panel2); }
+  .row.sel { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .row .meta { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line);
+    color: var(--muted); margin-left: 4px; }
+  .badge.warn { color: var(--warn); border-color: var(--warn); }
+  .detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+  .metabar { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .metabar div span { display: block; font-size: 11px; color: var(--muted); }
+  .chart { height: 340px; }
+  .chart.small { height: 220px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .legend i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 4px; }
+  .costs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  .costs div span { display: block; font-size: 11px; color: var(--muted); }
+  .state { padding: 40px; text-align: center; color: var(--muted); }
+  .error { margin: 0 18px 12px; padding: 10px 12px; border: 1px solid var(--down); color: var(--down);
+    border-radius: var(--radius); display: none; }
+  .loading { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--accent);
+    transform-origin: left; animation: load 1.2s ease-in-out infinite; display: none; }
+  @keyframes load { 0% { transform: scaleX(0); } 50% { transform: scaleX(.7); } 100% { transform: scaleX(1); opacity: 0; } }
+  code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
+  @media (max-width: 1000px) {
+    .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    main { grid-template-columns: 1fr; }
+    .list { max-height: 320px; }
+  }
+</style>
+</head>
+<body>
+<div class="loading" id="loading"></div>
+<header>
+  <h1>9/21 EMA · NIFTY options backtest</h1>
+  <span class="range" id="range"></span>
+  <span class="spacer"></span>
+  <span class="badge">1 lot · <span id="lot">65</span></span>
+  <button id="theme" title="Switch light / dark">☀︎ Light</button>
+</header>
+
+<div class="filters">
+  <label>Bars <div class="seg" id="tf"></div></label>
+  <label>Mode <div class="seg" id="mode"></div></label>
+  <label>Outcome
+    <select id="outcome">
+      <option value="all">All trades</option><option value="win">Winners</option>
+      <option value="loss">Losers</option><option value="whipsaw">Whipsaws</option>
+    </select></label>
+  <label>Entry from <select id="start"></select></label>
+  <label>Entry cutoff <select id="cutoff"></select></label>
+  <label>Cross
+    <select id="cross">
+      <option value="all">Any cross</option><option value="1">1st of the day</option>
+      <option value="2">2nd of the day</option><option value="3">3rd or later</option>
+    </select></label>
+</div>
+
+<div class="error" id="error"></div>
+
+<section class="kpis" id="kpis"></section>
+<section class="compare" id="compare"></section>
+
+<main id="main">
+  <div class="list">
+    <div class="head" id="listhead">Trades</div>
+    <div class="rows" id="rows" tabindex="0"></div>
+  </div>
+  <div class="detail" id="detail">
+    <div class="card metabar" id="metabar"></div>
+    <div class="card">
+      <div class="legend"><span>NIFTY spot</span><span><i style="background:var(--ema9)"></i>EMA 9</span>
+        <span><i style="background:var(--ema21)"></i>EMA 21</span><span>▲ entry ▼ exit</span></div>
+      <div class="chart" id="spotchart"></div>
+    </div>
+    <div class="card">
+      <div class="legend"><span id="optlabel">Option 1-minute</span></div>
+      <div class="chart small" id="optchart"></div>
+    </div>
+    <div class="card"><div class="costs" id="costs"></div></div>
+  </div>
+</main>
+
+<script src="lightweight-charts.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const state = { tf: "5", mode: "ATM_BUY", outcome: "all", start: "09:30", cutoff: "14:30", cross: "all",
+                trades: [], sel: -1 };
+const cache = new Map();  // query -> JSON, so going back to a filter or a trade is instant
+const inr = (x, dp = 0) => x === null || x === undefined ? "–" :
+  (x < 0 ? "-₹" : "₹") + Math.abs(x).toLocaleString("en-IN", { maximumFractionDigits: dp, minimumFractionDigits: dp });
+const num = (x, suf = "") => x === null || x === undefined ? "–" : `${x}${suf}`;
+const cls = (x) => x > 0 ? "pos" : x < 0 ? "neg" : "";
+
+let pending = 0;
+function busy(on) { pending += on ? 1 : -1; $("loading").style.display = pending > 0 ? "block" : "none"; }
+function showError(msg) { const e = $("error"); e.textContent = msg || ""; e.style.display = msg ? "block" : "none"; }
+
+async function getJSON(url) {
+  if (cache.has(url)) return cache.get(url);
+  busy(true);
+  try {
+    const r = await fetch(url);
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || `Request failed (${r.status})`);
+    cache.set(url, body);
+    return body;
+  } finally { busy(false); }
+}
+
+function query(extra = {}) {
+  const p = new URLSearchParams({ tf: state.tf, mode: state.mode, start: state.start, cutoff: state.cutoff,
+                                  cross: state.cross, ...extra });
+  return p.toString();
+}
+
+// ------------------------------------------------------------------ theme
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $("theme").textContent = t === "dark" ? "☀︎ Light" : "☾ Dark";
+  localStorage.setItem("ema921-theme", t);
+  if (charts.spot) restyleCharts();
+}
+$("theme").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+
+// ------------------------------------------------------------------ charts
+const charts = {};
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function chartOptions() {
+  return { layout: { background: { color: css("--panel") }, textColor: css("--muted") },
+           grid: { vertLines: { color: css("--line") }, horzLines: { color: css("--line") } },
+           rightPriceScale: { borderColor: css("--line") },
+           timeScale: { borderColor: css("--line"), timeVisible: true, secondsVisible: false },
+           crosshair: { mode: 0 }, autoSize: true };
+}
+function candleOptions() {
+  return { upColor: css("--up"), downColor: css("--down"), wickUpColor: css("--up"), wickDownColor: css("--down"),
+           borderVisible: false };
+}
+function makeCharts() {
+  charts.spot = LightweightCharts.createChart($("spotchart"), chartOptions());
+  charts.spotCandles = charts.spot.addCandlestickSeries(candleOptions());
+  charts.ema9 = charts.spot.addLineSeries({ color: css("--ema9"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+  charts.ema21 = charts.spot.addLineSeries({ color: css("--ema21"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+  charts.opt = LightweightCharts.createChart($("optchart"), chartOptions());
+  charts.optCandles = charts.opt.addCandlestickSeries(candleOptions());
+}
+function restyleCharts() {
+  charts.spot.applyOptions(chartOptions()); charts.opt.applyOptions(chartOptions());
+  charts.spotCandles.applyOptions(candleOptions()); charts.optCandles.applyOptions(candleOptions());
+  charts.ema9.applyOptions({ color: css("--ema9") }); charts.ema21.applyOptions({ color: css("--ema21") });
+}
+
+// ------------------------------------------------------------------ filters
+function seg(el, items, key) {
+  el.innerHTML = "";
+  for (const it of items) {
+    const b = document.createElement("button");
+    b.textContent = it.label; b.dataset.v = it.id;
+    b.onclick = () => { state[key] = it.id; refreshSeg(el, key); loadTrades(); };
+    el.appendChild(b);
+  }
+  refreshSeg(el, key);
+}
+function refreshSeg(el, key) { for (const b of el.children) b.classList.toggle("on", b.dataset.v === state[key]); }
+function fillSelect(el, values, key) {
+  el.innerHTML = values.map(v => `<option value="${v}">${v}</option>`).join("");
+  el.value = state[key];
+}
+for (const key of ["outcome", "start", "cutoff", "cross"]) {
+  $(key).onchange = (e) => { state[key] = e.target.value; loadTrades(); };
+}
+
+// ------------------------------------------------------------------ rendering
+function renderKpis(s, selected) {
+  const k = [
+    ["Total trades", s ? s.trades : "–", ""],
+    ["Win rate", s ? num(s.win_rate, "%") : "–", ""],
+    ["Net PnL", s ? inr(s.net_pnl) : "–", s ? cls(s.net_pnl) : ""],
+    ["Gross PnL", s ? inr(s.gross_pnl) : "–", s ? cls(s.gross_pnl) : ""],
+    ["Profit factor", s ? num(s.profit_factor) : "–", ""],
+    ["Selected trade", selected ? inr(selected.net_pnl) : "–", selected ? cls(selected.net_pnl) : ""],
+  ];
+  $("kpis").innerHTML = k.map(([a, b, c]) => `<div class="kpi"><div class="k">${a}</div><div class="v ${c}">${b}</div></div>`).join("");
+}
+function renderCompare(modes) {
+  if (!modes || !modes.length) { $("compare").innerHTML = ""; return; }
+  const rows = modes.map(m => `<tr class="${m.mode === state.mode ? "current" : ""}"><td>${m.label}</td><td>${m.trades}</td>
+    <td>${num(m.win_rate, "%")}</td><td class="${cls(m.gross_pnl)}">${inr(m.gross_pnl)}</td>
+    <td>${inr(m.slippage + m.charges)}</td><td class="${cls(m.net_pnl)}">${inr(m.net_pnl)}</td>
+    <td>${num(m.profit_factor)}</td><td>${num(m.payoff_ratio)}</td><td>${inr(m.expectancy)}</td>
+    <td>${inr(m.max_drawdown)} (${num(m.max_drawdown_pct, "%")})</td><td class="neg">${inr(m.worst_mae)}</td></tr>`).join("");
+  $("compare").innerHTML = `<table><thead><tr><th>All three modes, same signals</th><th>Trades</th><th>Win</th><th>Gross</th>
+    <th>Friction</th><th>Net</th><th>PF</th><th>Payoff</th><th>Expectancy</th><th>Max drawdown</th><th>Worst open loss</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+function renderList(data) {
+  const t = data.trades;
+  $("listhead").textContent = `${t.length} trades · ${data.days_tested} days tested · ${data.no_trade_days} without a trade` +
+    (data.skips ? ` · ${data.skips} entries skipped (no option data)` : "") + " · ↑ ↓ to move";
+  if (!t.length) { $("rows").innerHTML = `<div class="state">No trades match these filters.</div>`; return; }
+  $("rows").innerHTML = t.map((x, i) => `<div class="row" data-i="${i}">
+      <div><b>${x.day}</b> ${x.entry_time.slice(11)}–${(x.exit_time || "").slice(11)}
+        ${x.whipsaw ? '<span class="badge warn">whipsaw</span>' : ""}${x.stale_exit ? '<span class="badge warn">stale exit</span>' : ""}</div>
+      <div class="${cls(x.net_pnl)}"><b>${inr(x.net_pnl)}</b></div>
+      <div class="meta">${x.direction === "LONG" ? "▲ Long" : "▼ Short"} · ${x.side} ${x.strike} ${x.option_type} · cross #${x.cross_number}</div>
+      <div class="meta">${x.exit_reason === "SQUARE_OFF" ? "15:00 square-off" : "opposite cross"}</div></div>`).join("");
+  for (const el of $("rows").children) el.onclick = () => select(Number(el.dataset.i));
+}
+function renderMeta(x) {
+  const f = [["Symbol", x.symbol], ["Direction", x.direction === "LONG" ? "▲ Long NIFTY" : "▼ Short NIFTY"],
+    ["Leg", `${x.side} ${x.strike} ${x.option_type}`], ["NIFTY entry → exit", `${num(x.nifty_entry?.toFixed(2))} → ${num(x.nifty_exit?.toFixed(2))}`],
+    ["Option entry → exit", `${x.entry_price} → ${x.exit_price}`], ["Fills", `${x.entry_fill} → ${x.exit_fill}`],
+    ["Expiry / DTE", `${x.expiry} · ${x.dte}d`], ["Exit reason", x.exit_reason === "SQUARE_OFF" ? "15:00 square-off" : "Opposite cross"],
+    ["Net PnL", `<span class="${cls(x.net_pnl)}">${inr(x.net_pnl)}</span>`],
+    ["Worst open loss", inr(x.mae)], ["Badges", (x.whipsaw ? "whipsaw " : "") + (x.stale_exit ? "stale exit" : "") || "–"]];
+  $("metabar").innerHTML = f.map(([a, b]) => `<div><span>${a}</span>${b}</div>`).join("");
+}
+function renderCosts(x) {
+  const c = x.charges || {};
+  const items = [["Gross PnL", x.gross_pnl, true], ["Slippage", -x.slippage], ["Brokerage", -c.brokerage], ["STT", -c.stt],
+    ["Exchange charge", -c.exchange], ["SEBI fee", -c.sebi], ["Stamp duty", -c.stamp], ["GST", -c.gst], ["Net PnL", x.net_pnl, true]];
+  $("costs").innerHTML = items.map(([a, b, bold]) => `<div><span>${a}</span><b class="${bold ? cls(b) : ""}">${inr(b, 2)}</b></div>`).join("");
+}
+function emptyDetail(msg) {
+  $("metabar").innerHTML = `<div class="state" style="padding:8px">${msg}</div>`;
+  $("costs").innerHTML = "";
+  charts.spotCandles.setData([]); charts.ema9.setData([]); charts.ema21.setData([]); charts.optCandles.setData([]);
+  charts.spotCandles.setMarkers([]); charts.optCandles.setMarkers([]);
+}
+
+// ------------------------------------------------------------------ loading
+let token = 0;
+async function loadTrades() {
+  const my = ++token;
+  showError("");
+  try {
+    const data = await getJSON(`api/trades?${query({ outcome: state.outcome })}`);
+    if (my !== token) return;
+    if (!data.has_data) {
+      renderKpis(null); renderCompare([]);
+      $("rows").innerHTML = `<div class="state">No 1-minute data stored yet.<br>On the server run <code>deploy/tradex.sh ema-load</code>.</div>`;
+      emptyDetail("Nothing to show yet."); return;
+    }
+    state.trades = data.trades;
+    renderCompare(data.modes); renderList(data); renderKpis(data.summary, null);
+    state.sel = -1;
+    if (data.trades.length) select(0); else emptyDetail("No trade selected.");
+  } catch (e) { if (my === token) showError(e.message); }
+}
+async function select(i) {
+  if (i < 0 || i >= state.trades.length) return;
+  state.sel = i;
+  for (const el of $("rows").children) el.classList.toggle("sel", Number(el.dataset.i) === i);
+  const row = $("rows").children[i]; if (row) row.scrollIntoView({ block: "nearest" });
+  const x = state.trades[i];
+  renderMeta(x); renderCosts(x);
+  const summary = cache.get(`api/trades?${query({ outcome: state.outcome })}`)?.summary;
+  renderKpis(summary, x);
+  try {
+    const d = await getJSON(`api/trade/${x.id}?${query()}`);
+    if (state.sel !== i) return;
+    charts.spotCandles.setData(d.spot); charts.ema9.setData(d.ema9); charts.ema21.setData(d.ema21);
+    charts.spotCandles.setMarkers(d.markers.map(m => m.kind === "entry"
+      ? { time: m.time, position: m.direction === "LONG" ? "belowBar" : "aboveBar", color: css("--accent"),
+          shape: m.direction === "LONG" ? "arrowUp" : "arrowDown", text: "Entry" }
+      : { time: m.time, position: "aboveBar", color: css("--warn"), shape: "circle", text: "Exit" }));
+    charts.spot.timeScale().fitContent();
+    $("optlabel").textContent = `${x.symbol} · 1-minute`;
+    charts.optCandles.setData(d.option);
+    charts.optCandles.setMarkers(d.option_markers.map(m => ({ time: m.time, position: m.kind === "entry" ? "belowBar" : "aboveBar",
+      color: m.kind === "entry" ? css("--accent") : css("--warn"), shape: m.kind === "entry" ? "arrowUp" : "arrowDown",
+      text: m.kind === "entry" ? `Entry ${x.entry_price}` : `Exit ${x.exit_price}` })));
+    charts.opt.timeScale().fitContent();
+    if (!d.option.length) $("optlabel").textContent = `${x.symbol} · no 1-minute candles stored`;
+  } catch (e) { showError(e.message); }
+}
+$("rows").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { select(Math.min(state.sel + 1, state.trades.length - 1)); e.preventDefault(); }
+  if (e.key === "ArrowUp") { select(Math.max(state.sel - 1, 0)); e.preventDefault(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+  if (document.activeElement === $("rows")) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { $("rows").focus(); $("rows").dispatchEvent(new KeyboardEvent("keydown", { key: e.key })); e.preventDefault(); }
+});
+
+// ------------------------------------------------------------------ start
+(async function init() {
+  applyTheme(localStorage.getItem("ema921-theme") || "dark");
+  makeCharts();
+  renderKpis(null);
+  try {
+    const m = await getJSON("api/meta");
+    $("range").textContent = `${m.range[0]} → ${m.range[1]}`;
+    $("lot").textContent = m.lot_size;
+    seg($("tf"), m.timeframes.map(t => ({ id: String(t), label: `${t}m` })), "tf");
+    seg($("mode"), m.modes.map(x => ({ id: x.id, label: x.label })), "mode");
+    fillSelect($("start"), m.starts, "start"); fillSelect($("cutoff"), m.cutoffs, "cutoff");
+    await loadTrades();
+  } catch (e) { showError(`Could not load the backtest: ${e.message}`); }
+})();
+</script>
+</body>
+</html>
