@@ -237,3 +237,60 @@ class DataQualityLog(Base):
     status: Mapped[str] = mapped_column(String(5))
     details: Mapped[dict | None] = mapped_column(JSON)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class MinuteCandle(Base):
+    """1-minute candles for the 9/21 EMA options backtest: NIFTY spot and individual options.
+
+    Keyed by Groww's own symbol (NSE-NIFTY, NSE-NIFTY-25Nov25-24500-CE ...). Kept apart from
+    `market_candles` so the dashboard collector and its quality checks are untouched.
+    """
+
+    __tablename__ = "minute_candles"
+    __table_args__ = (UniqueConstraint("groww_symbol", "candle_time", name="uq_minute_candle"),)
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)
+    groww_symbol: Mapped[str] = mapped_column(String(64))
+    trade_date: Mapped[date] = mapped_column(Date)  # IST trading day
+    candle_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # candle START, UTC
+    open: Mapped[float | None] = mapped_column(Price)
+    high: Mapped[float | None] = mapped_column(Price)
+    low: Mapped[float | None] = mapped_column(Price)
+    close: Mapped[float | None] = mapped_column(Price)
+    volume: Mapped[int | None] = mapped_column(BigInteger)
+    open_interest: Mapped[int | None] = mapped_column(BigInteger)
+
+
+Index("ix_minute_candle_symbol_day", MinuteCandle.groww_symbol, MinuteCandle.trade_date)
+
+
+class MinuteFetch(Base):
+    """One row per (symbol, day) asked from Groww, so the loader can resume and never asks
+    twice. rows = 0 means Groww answered with nothing (recorded, not treated as zero prices)."""
+
+    __tablename__ = "minute_fetches"
+    __table_args__ = (UniqueConstraint("groww_symbol", "trade_date", name="uq_minute_fetch"),)
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)
+    groww_symbol: Mapped[str] = mapped_column(String(64))
+    trade_date: Mapped[date] = mapped_column(Date)
+    rows: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(10))  # OK / EMPTY / ERROR
+    error: Mapped[str | None] = mapped_column(String(300))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class OptionContract(Base):
+    """Option contracts (live and expired) listed by Groww's get_contracts, plus every expiry
+    date get_expiries returned (a row with strike NULL marks "expiry listed")."""
+
+    __tablename__ = "option_contracts"
+    __table_args__ = (UniqueConstraint("groww_symbol", name="uq_option_contract"),
+                      Index("ix_option_contract_lookup", "underlying", "expiry_date"))
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    underlying: Mapped[str] = mapped_column(String(32))
+    expiry_date: Mapped[date] = mapped_column(Date)
+    strike: Mapped[float | None] = mapped_column(Price)
+    option_type: Mapped[str | None] = mapped_column(String(2))  # CE / PE; NULL = expiry marker
+    groww_symbol: Mapped[str] = mapped_column(String(64))
