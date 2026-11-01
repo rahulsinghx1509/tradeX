@@ -171,6 +171,44 @@ def load_contracts(session: Session, client: Any, expiry_list: list[date], rep: 
         session.commit()
 
 
+def guess_symbol(session: Session, expiry: date, strike: float, option_type: str) -> str:
+    """Groww's symbol for a contract its list left out, built like the listed ones of the same
+    expiry (e.g. NSE-NIFTY-03Nov26-22850-CE). Only used if Groww then returns candles for it."""
+    from sqlalchemy import select
+
+    from app.db.models import OptionContract
+
+    listed = session.scalar(select(OptionContract.groww_symbol).where(
+        OptionContract.underlying == S.UNDERLYING, OptionContract.expiry_date == expiry,
+        OptionContract.option_type.is_not(None)).limit(1))
+    prefix = listed.rsplit("-", 2)[0] if listed else f"NSE-{S.UNDERLYING}-{expiry:%d%b%y}"
+    return f"{prefix}-{strike:g}-{option_type}"
+
+
+def try_unlisted(session: Session, client: Any, expiry: date, strike: float, option_type: str,
+                 day: date, rep: LoadReport, live: bool = False) -> str | None:
+    """get_contracts skips some strikes that do trade (server probe 2026-11-01: 22850 and 24600
+    were missing while 50-point neighbours were listed). Ask Groww for the guessed symbol's
+    candles; if any come back the contract is real and is recorded. Never invents prices."""
+    sym = guess_symbol(session, expiry, strike, option_type)
+    if live:  # today is still trading: store what exists, but don't mark the day as fetched
+        try:
+            candles = fetch_day(client, sym, "FNO", day)
+        except Exception:
+            candles = []
+        n = S.save_minutes(session, sym, day, candles)
+        session.commit()
+    elif S.fetched(session, sym, day):
+        n = 1 if S.load_minutes(session, sym, day, day).shape[0] else 0
+    else:
+        n = _fetch_and_store(session, client, sym, "FNO", day, rep) or 0
+    if n:
+        S.save_contracts(session, S.UNDERLYING, expiry, [(sym, strike, option_type)])
+        session.commit()
+        return sym
+    return None
+
+
 def load_options(session: Session, client: Any, spot: pd.DataFrame, start: date, end: date,
                  rep: LoadReport, cfg: E.Config | None = None,
                  log: Callable[[str], None] = print) -> None:
@@ -185,6 +223,8 @@ def load_options(session: Session, client: Any, spot: pd.DataFrame, start: date,
     missing_contract = 0
     for (d, k, t), e in sorted(by_leg.items()):
         sym = data.contract(e, k, t) if e else None
+        if sym is None and e is not None:
+            sym = try_unlisted(session, client, e, k, t, d, rep)
         if sym is None:
             missing_contract += 1
         else:

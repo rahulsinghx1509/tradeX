@@ -89,6 +89,15 @@ def probe_age(client: Any, today: date, age: int) -> Row:
         strike = E.atm_strike(closes[len(closes) // 2])
         match = [c for c in contracts if L.parse_contract(c) == (strike, "CE")]
         if not match:
+            guess = f"NSE-NIFTY-{expiry:%d%b%y}-{strike:g}-CE"
+            try:
+                got = L.fetch_day(client, guess, "FNO", row.day)
+            except Exception:
+                got = []
+            if got:
+                row.contract, row.option_bars = guess + " (not listed)", len(got)
+                row.option_first, row.option_last = _span(got)
+                return row
             strikes = sorted({k for c in contracts if (p := L.parse_contract(c)) for k in [p[0]]})
             span = (f"strikes {strikes[0]:g}-{strikes[-1]:g}, step {_step(strikes)}"
                     if strikes else "no strikes")

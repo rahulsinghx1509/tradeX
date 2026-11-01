@@ -358,5 +358,14 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Trade viewer: Flask (as RK's doc asks), served by waitress as the `ema` service at `http://<server>/ema/`.
   GET only, computes a filter combination on first view and caches it. Chart library: TradingView
   Lightweight Charts 4.2.3 (Apache 2.0), copied into the repo so the page needs no CDN.
-- Not verified: Groww's "1minute" interval, 1m candles for expired options, candle stamps being
+- Server probe (2026-11-01): Groww returns 1-minute candles for NIFTY and for expired NIFTY options
+  back 3 years, stamped with the start minute (09:15 first), plus an extra 15:30 candle the engine
+  ignores. One option day came back twice (fixed: one row per minute is kept). Two probe days could
+  not find the ATM strike in Groww's contract list (being checked).
+- Paper engine: `ema-paper` service, every minute in market hours. It re-runs the backtest engine
+  on today with `as_of` = now, so paper trades follow exactly the backtest rules (a test checks a
+  simulated day matches the backtest trade for trade). One Telegram message per signal (all modes),
+  marked PAPER, plus a day summary; stale NIFTY data (> 3 minutes) means NO TRADE. Default 5m bars,
+  09:30-14:30, all three modes; change with EMA921_PAPER_* in .env, switch off with EMA921_PAPER_OFF=1.
+- Not verified (before the probe): Groww's "1minute" interval, 1m candles for expired options, candle stamps being
   start times (the probe checks all three), and every cost rate in `ema921/costs.py`.

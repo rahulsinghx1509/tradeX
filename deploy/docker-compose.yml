@@ -57,6 +57,15 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
 
+  # 9/21 EMA PAPER engine: PAPER Telegram messages during market hours. Never places orders.
+  # Change its settings in .env (EMA921_PAPER_TF / _START / _CUTOFF / _MODES), then
+  # deploy/tradex.sh restart ema-paper. To switch it off: deploy/tradex.sh stop-paper
+  ema-paper:
+    <<: *app
+    command: ["sh", "-c", "python scripts/ema921_paper.py --tf $${EMA921_PAPER_TF:-5} --start $${EMA921_PAPER_START:-09:30} --cutoff $${EMA921_PAPER_CUTOFF:-14:30} --modes $${EMA921_PAPER_MODES:-all}"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
   dashboard:
     build:
       context: ..

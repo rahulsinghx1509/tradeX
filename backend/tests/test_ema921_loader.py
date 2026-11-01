@@ -160,3 +160,34 @@ def test_duplicate_candles_from_groww_are_stored_once(session):
     L.load_spot(session, Twice(), END, END, rep, log=lambda _: None)
     assert not rep.errors
     assert len(S.load_minutes(session, S.SPOT_SYMBOL, END, END)) == 375
+
+
+class GappyGroww(FakeGroww):
+    """Groww whose contract list leaves out every strike ending in 50 (like the 22850 gap)."""
+
+    def get_contracts(self, exchange, underlying_symbol, expiry_date):
+        body = super().get_contracts(exchange, underlying_symbol, expiry_date)
+        return {"contracts": [c for c in body["contracts"] if "50-" not in c]}
+
+
+def test_unlisted_strikes_are_tried_directly(session):
+    rep = L.load_all(session, GappyGroww(), START, END, log=lambda _: None)
+    assert not rep.errors
+    spot = S.load_spot(session, START, END)
+    res = E.run(spot, S.DbOptionData(session), START, END, E.Config(timeframe=5), holidays=HOL)
+    assert not [s for s in res.skips if s.reason == "NO_CONTRACT"]
+    assert any(t.strike % 100 == 50 for m in E.MODES for t in res.trades[m])
+
+
+def test_unlisted_strike_that_does_not_trade_stays_missing(session):
+    class Nothing(GappyGroww):
+        def get_historical_candles(self, **kw):
+            if kw["segment"] == "FNO" and "50-" in kw["groww_symbol"]:
+                return {"candles": []}
+            return super().get_historical_candles(**kw)
+
+    L.load_all(session, Nothing(), START, END, log=lambda _: None)
+    spot = S.load_spot(session, START, END)
+    res = E.run(spot, S.DbOptionData(session), START, END, E.Config(timeframe=5), holidays=HOL)
+    assert {s.reason for s in res.skips} <= {"NO_CONTRACT"}
+    assert all(t.strike % 100 == 0 for m in E.MODES for t in res.trades[m])

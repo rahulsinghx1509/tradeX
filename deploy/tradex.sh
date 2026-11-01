@@ -37,6 +37,8 @@ case "${1:-help}" in
   intraday-probe) script intraday_probe.py "${@:2}" && echo "Report: reports/intraday_probe.md" ;;
   ema-probe)  script ema921_probe.py "${@:2}" && echo "Report: reports/ema921_probe.md" ;;
   ema-load)   script ema921_load.py "${@:2}" ;;
+  ema-paper-once) script ema921_paper.py --once "${@:2}" ;;
+  stop-paper) dc stop ema-paper && echo "Paper engine stopped until the next start/update. To keep it off, set EMA921_PAPER_OFF=1 in .env" ;;
   ema-backtest) script ema921_backtest.py "${@:2}" && echo "Report: reports/ema921_backtest.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
@@ -76,6 +78,8 @@ Usage: deploy/tradex.sh <command>
   ema-probe    9/21 EMA: how far back Groww keeps 1-min spot + expired-option candles (reports/ema921_probe.md)
   ema-load     9/21 EMA: load 1-min NIFTY spot + needed options from Groww, last 2 years (--years 3); re-runnable
   ema-backtest 9/21 EMA: backtest 5/15/30-min x 3 modes (reports/ema921_backtest.md, ema921_trades.csv)
+  ema-paper-once 9/21 EMA: run one PAPER-engine step now (the ema-paper service does this every minute)
+  stop-paper   stop the 9/21 EMA PAPER engine (it starts again on the next update unless EMA921_PAPER_OFF=1)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)
   final        one-time final test of variant C on held-back years (reports/final_test.md)
   chat-id      print your Telegram chat ID

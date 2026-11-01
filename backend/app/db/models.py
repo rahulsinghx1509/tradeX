@@ -294,3 +294,44 @@ class OptionContract(Base):
     strike: Mapped[float | None] = mapped_column(Price)
     option_type: Mapped[str | None] = mapped_column(String(2))  # CE / PE; NULL = expiry marker
     groww_symbol: Mapped[str] = mapped_column(String(64))
+
+
+class PaperTrade(Base):
+    """A 9/21 EMA PAPER trade from the live paper engine. Never a real order.
+
+    One row per (day, timeframe, mode, entry signal). status OPEN until the exit is filled.
+    """
+
+    __tablename__ = "paper_trades"
+    __table_args__ = (UniqueConstraint("trade_date", "timeframe", "mode", "signal_time",
+                                       name="uq_paper_trade"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    timeframe: Mapped[int] = mapped_column(Integer)  # minutes
+    mode: Mapped[str] = mapped_column(String(10))  # ITM_BUY / ATM_BUY / ATM_SELL
+    signal_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    direction: Mapped[int] = mapped_column(Integer)  # +1 long NIFTY, -1 short
+    side: Mapped[str] = mapped_column(String(4))  # BUY / SELL
+    option_type: Mapped[str] = mapped_column(String(2))
+    strike: Mapped[float] = mapped_column(Price)
+    expiry_date: Mapped[date] = mapped_column(Date)
+    groww_symbol: Mapped[str] = mapped_column(String(64))
+    cross_number: Mapped[int] = mapped_column(Integer)
+    entry_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    entry_price: Mapped[float] = mapped_column(Price)
+    entry_fill: Mapped[float] = mapped_column(Price)
+    nifty_entry: Mapped[float | None] = mapped_column(Price)
+    exit_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    exit_price: Mapped[float | None] = mapped_column(Price)
+    exit_fill: Mapped[float | None] = mapped_column(Price)
+    exit_reason: Mapped[str | None] = mapped_column(String(20))
+    nifty_exit: Mapped[float | None] = mapped_column(Price)
+    stale_exit: Mapped[bool] = mapped_column(Boolean, default=False)
+    gross_pnl: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    slippage: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    charges: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    net_pnl: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    status: Mapped[str] = mapped_column(String(6))  # OPEN / CLOSED
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
