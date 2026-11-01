@@ -69,6 +69,11 @@ class LiveOptions:
             L.load_contracts(self.session, self.client, [expiry], L.LoadReport())
             self._data = S.DbOptionData(self.session)
             sym = self._data.contract(expiry, strike, option_type)
+        if sym is None:  # Groww's list has gaps: try the contract directly (see loader.try_unlisted)
+            sym = L.try_unlisted(self.session, self.client, expiry, strike, option_type, self.today,
+                                 L.LoadReport(), live=True)
+            if sym is not None:
+                self._data = S.DbOptionData(self.session)
         return sym
 
     def minutes(self, symbol: str, day: date) -> pd.DataFrame | None:
