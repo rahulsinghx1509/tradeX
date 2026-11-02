@@ -365,7 +365,7 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Paper engine: `ema-paper` service, every minute in market hours. It re-runs the backtest engine
   on today with `as_of` = now, so paper trades follow exactly the backtest rules (a test checks a
   simulated day matches the backtest trade for trade). One Telegram message per signal (all modes),
-  marked PAPER, plus a day summary; stale NIFTY data (> 3 minutes) means NO TRADE. Default 5m bars,
+  marked PAPER, plus an end-of-day trade report (every trade, then totals per mode); stale NIFTY data (> 3 minutes) means NO TRADE. Default 5m bars,
   09:30-14:30, all three modes; change with EMA921_PAPER_* in .env, switch off with EMA921_PAPER_OFF=1.
 - First backtest (2026-11-01, 2024-11-01 to 2026-10-31, 5,001 trades): all 9 timeframe x mode
   combinations lost after costs (profit factor 0.73-0.93). With zero slippage (charges only), 5m was
@@ -400,3 +400,11 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   profit factor >= 1.05. Nothing re-tuned on the same data.
 - Commands: `tradex.sh straddle-load` (four legs a day, reuses the EMA spot and expiry data),
   then `tradex.sh straddle-backtest`.
+- **Result (RK's server run, 2026-11-01, 2024-11-01 to 2026-10-31, default slippage): FAIL.**
+  379 days traded, 48% winning days, gross +₹83k, friction ₹2.70L (about ₹710 a day: 8 orders,
+  slippage on 4 legs), net −₹1.86L, profit factor 0.65; year 1 −₹1.15L, year 2 −₹72k. 47% of sold
+  legs hit their stop; both legs stopped on 54 days. Skipped: 89 VIX-jump days, 19 without the
+  previous VIX close, 18 without NIFTY data. Charges alone (about ₹230 a day) would roughly cancel
+  the gross edge, so even perfect fills would be about break-even. Per the rules: no held-back
+  test, no re-tuning. NIFTY option selling joins the families with no edge after costs.
+
