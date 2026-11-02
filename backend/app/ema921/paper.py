@@ -245,7 +245,7 @@ def step(session: Session, client: Any, notifier: Any, cfg: E.Config, modes: tup
             if hasattr(notifier, "send_photo"):  # the same report as a picture; text already went
                 try:
                     from app.ema921.report_card import render_png
-                    notifier.send_photo(render_png(today, cfg.timeframe, rows),
+                    notifier.send_photo(render_png(today, cfg.timeframe, rows, cfg.qty),
                                         f"PAPER day report {today:%d %b %Y}. No order was placed.")
                 except Exception:  # a picture problem must never stop the paper engine
                     log.exception("day report picture not sent")
