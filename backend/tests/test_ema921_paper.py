@@ -198,3 +198,32 @@ def test_day_report_picture_draws_closed_open_and_empty_days():
     for rows in ([closed, still_open], [still_open], []):
         png = render_png(t0.date(), 5, rows)
         assert png.startswith(b"\x89PNG") and len(png) > 1000
+
+
+def test_server_notifier_wrapper_passes_pictures_on():
+    """The ema-paper service wraps the notifier; the wrapper must forward send_photo too."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    from app.alerts.telegram import AlertError
+
+    scripts = Path(__file__).resolve().parents[2] / "scripts"
+    path = scripts / "ema921_paper.py"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))  # for the scripts' own _bootstrap helper
+    spec = importlib.util.spec_from_file_location("ema921_paper_script", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    inner = Notes()
+    safe = mod.SafeNotifier(inner)
+    assert hasattr(safe, "send_photo")
+    safe.send_photo(b"\x89PNG", "cap")
+    assert inner.photos == [b"\x89PNG"]
+
+    class Broken:
+        def send_photo(self, png, caption=""):
+            raise AlertError("down")
+
+    mod.SafeNotifier(Broken()).send_photo(b"x")  # logged, never raised
