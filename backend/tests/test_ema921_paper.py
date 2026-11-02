@@ -40,6 +40,10 @@ class ClockGroww(FakeGroww):
 class Notes:
     def __init__(self):
         self.sent: list[str] = []
+        self.photos: list[bytes] = []
+
+    def send_photo(self, png: bytes, caption: str = "") -> None:
+        self.photos.append(png)
 
     def send(self, text: str) -> None:
         self.sent.append(text)
@@ -91,6 +95,7 @@ def test_paper_day_matches_the_backtest(session):
     assert len(entries) == len(signals)  # one message per signal, all modes together
     assert len(exits) >= 1
     assert any("day report" in m for m in notes.sent)
+    assert len(notes.photos) == 1 and notes.photos[0].startswith(b"\x89PNG")
 
 
 def test_open_trade_stays_open_until_its_exit_is_known(session):
@@ -174,3 +179,21 @@ def test_day_report_lists_every_trade_and_totals():
                   **{**common, "exit_time": None, "exit_reason": None, "nifty_exit": None,
                      "status": "OPEN"})
     assert "still OPEN" in summary_message(t0.date(), 5, [open_row])
+
+
+def test_day_report_picture_draws_closed_open_and_empty_days():
+    from app.ema921.report_card import render_png
+
+    t0 = datetime(2026, 11, 2, 7, 20, tzinfo=UTC)
+    common = dict(trade_date=t0.date(), timeframe=5, signal_time=t0, direction=-1, strike=23300,
+                  expiry_date=date(2026, 11, 3), groww_symbol="x", cross_number=2, entry_time=t0,
+                  nifty_entry=23297.0, stale_exit=False, created_at=t0)
+    closed = PaperTrade(mode="ATM_SELL", side="SELL", option_type="CE", entry_price=83.9,
+                        entry_fill=82.95, exit_price=59.1, exit_fill=59.9, exit_time=t0,
+                        exit_reason="TRAIL_STOP", gross_pnl=1612, slippage=100, charges=70,
+                        net_pnl=1442, status="CLOSED", **common)
+    still_open = PaperTrade(mode="ITM_BUY", side="BUY", option_type="PE", entry_price=269.7,
+                            entry_fill=271.55, status="OPEN", **common)
+    for rows in ([closed, still_open], [still_open], []):
+        png = render_png(t0.date(), 5, rows)
+        assert png.startswith(b"\x89PNG") and len(png) > 1000
