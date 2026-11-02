@@ -47,6 +47,13 @@ class SafeNotifier:
         except AlertError as exc:
             log.error("Message not sent: %s", exc)
 
+    def send_photo(self, png: bytes, caption: str = "") -> None:
+        log.info("picture: %s (%d bytes)", caption, len(png))
+        try:
+            self.inner.send_photo(png, caption)
+        except AlertError as exc:
+            log.error("Picture not sent: %s", exc)
+
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
