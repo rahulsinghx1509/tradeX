@@ -8,7 +8,7 @@ Every minute during market hours it:
 4. compares the result with the paper_trades table: a new trade sends a PAPER ENTRY message,
    a newly filled exit sends a PAPER EXIT message (one Telegram message per signal, all modes
    together);
-5. after 15:05 sends one end-of-day summary.
+5. after 15:05 sends one end-of-day trade report (every trade, then totals per mode).
 
 This is PAPER ONLY. It never places, modifies or cancels an order: the Groww calls it makes
 are get_historical_candles, get_expiries and get_contracts (a test checks this).
@@ -110,7 +110,10 @@ class PaperState:
 
 # ----------------------------------------------------------------------------- messages
 def _hm(t) -> str:
-    return pd.Timestamp(t).tz_convert(IST).strftime("%H:%M")
+    ts = pd.Timestamp(t)
+    if ts.tzinfo is None:  # read back from the database (stored as UTC; SQLite drops the zone)
+        ts = ts.tz_localize("UTC")
+    return ts.tz_convert(IST).strftime("%H:%M")
 
 
 def _leg(t: E.Trade) -> str:
@@ -141,11 +144,35 @@ def exit_message(tf: int, items: list[E.Trade]) -> str:
     return "\n".join(lines)
 
 
+def _rs(x) -> str:
+    return "–" if x is None else (f"-₹{abs(float(x)):,.0f}" if float(x) < 0 else f"₹{float(x):,.0f}")
+
+
 def summary_message(day: date, tf: int, rows: list[PaperTrade]) -> str:
-    lines = [f"🧪 PAPER · 9/21 EMA {tf}m · day summary {day:%d %b %Y}"]
+    """End-of-day trade report: every paper trade of the day, then the totals per mode."""
+    lines = [f"🧪 PAPER · 9/21 EMA {tf}m · day report {day:%d %b %Y}"]
     if not rows:
         lines.append("No paper trades today.")
         return "\n".join(lines)
+    rows = sorted(rows, key=lambda r: (r.entry_time, E.MODES.index(r.mode) if r.mode in E.MODES else 9))
+    by_signal: dict = defaultdict(list)
+    for r in rows:
+        by_signal[r.signal_time].append(r)
+    for i, group in enumerate(by_signal.values(), 1):
+        r0 = group[0]
+        arrow = "▲ LONG" if r0.direction > 0 else "▼ SHORT"
+        nifty = f" · NIFTY {float(r0.nifty_entry):,.0f}" if r0.nifty_entry is not None else ""
+        nifty += f" → {float(r0.nifty_exit):,.0f}" if r0.nifty_exit is not None else ""
+        out = (f"{_hm(r0.exit_time)} {E.EXIT_LABELS.get(r0.exit_reason, r0.exit_reason)}"
+               if r0.exit_time is not None else "still OPEN")
+        lines += ["", f"Trade {i}: {arrow} {_hm(r0.entry_time)} → {out}{nifty}"]
+        for r in group:
+            leg = f"{r.side} {float(r.strike):g} {r.option_type}"
+            px = f"{float(r.entry_fill):g} → {float(r.exit_fill):g}" if r.exit_fill is not None \
+                else f"{float(r.entry_fill):g} → open"
+            stale = " · STALE price" if r.stale_exit else ""
+            lines.append(f"• {E.MODE_LABELS.get(r.mode, r.mode)}: {leg} {px} · net {_rs(r.net_pnl)}{stale}")
+    lines += ["", "Totals per mode:"]
     by_mode: dict[str, list[PaperTrade]] = defaultdict(list)
     for r in rows:
         by_mode[r.mode].append(r)
@@ -154,8 +181,12 @@ def summary_message(day: date, tf: int, rows: list[PaperTrade]) -> str:
         if not rs:
             continue
         nets = [float(r.net_pnl) for r in rs if r.net_pnl is not None]
+        gross = sum(float(r.gross_pnl) for r in rs if r.gross_pnl is not None)
+        costs = sum(float(r.slippage or 0) + float(r.charges or 0) for r in rs)
         wins = sum(1 for x in nets if x > 0)
-        lines.append(f"• {E.MODE_LABELS[mode]}: {len(rs)} trades, {wins} winners, net ₹{sum(nets):,.0f}")
+        lines.append(f"• {E.MODE_LABELS[mode]}: {len(rs)} trades, {wins} winners, gross {_rs(gross)}, "
+                     f"slippage + charges {_rs(costs)}, net {_rs(sum(nets))}")
+    lines.append("Paper trades only. No order was placed.")
     return "\n".join(lines)
 
 
@@ -208,7 +239,7 @@ def step(session: Session, client: Any, notifier: Any, cfg: E.Config, modes: tup
                 PaperTrade.trade_date == today, PaperTrade.timeframe == cfg.timeframe)))
             notifier.send(summary_message(today, cfg.timeframe, rows))
             state.summary_sent = True
-            return "day summary sent"
+            return "day report sent"
         return "closed for the day"
 
     as_of = pd.Timestamp(ist.replace(second=0, microsecond=0))

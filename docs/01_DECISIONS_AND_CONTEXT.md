@@ -365,7 +365,7 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Paper engine: `ema-paper` service, every minute in market hours. It re-runs the backtest engine
   on today with `as_of` = now, so paper trades follow exactly the backtest rules (a test checks a
   simulated day matches the backtest trade for trade). One Telegram message per signal (all modes),
-  marked PAPER, plus a day summary; stale NIFTY data (> 3 minutes) means NO TRADE. Default 5m bars,
+  marked PAPER, plus an end-of-day trade report (every trade, then totals per mode); stale NIFTY data (> 3 minutes) means NO TRADE. Default 5m bars,
   09:30-14:30, all three modes; change with EMA921_PAPER_* in .env, switch off with EMA921_PAPER_OFF=1.
 - First backtest (2026-11-01, 2024-11-01 to 2026-10-31, 5,001 trades): all 9 timeframe x mode
   combinations lost after costs (profit factor 0.73-0.93). With zero slippage (charges only), 5m was

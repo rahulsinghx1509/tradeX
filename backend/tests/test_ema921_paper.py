@@ -90,7 +90,7 @@ def test_paper_day_matches_the_backtest(session):
     signals = {(r.signal_time) for r in rows}
     assert len(entries) == len(signals)  # one message per signal, all modes together
     assert len(exits) >= 1
-    assert any("day summary" in m for m in notes.sent)
+    assert any("day report" in m for m in notes.sent)
 
 
 def test_open_trade_stays_open_until_its_exit_is_known(session):
@@ -148,3 +148,29 @@ def test_paper_engine_has_no_order_calls():
     src = inspect.getsource(P) + inspect.getsource(L) + inspect.getsource(E)
     for word in ("place_order", "modify_order", "cancel_order", "PlaceOrder", "smart_order"):
         assert word not in src
+
+
+def test_day_report_lists_every_trade_and_totals():
+    PT, summary_message = PaperTrade, P.summary_message
+    t0 = datetime(2026, 11, 2, 7, 20, tzinfo=UTC)  # 12:50 IST
+    t1 = datetime(2026, 11, 2, 8, 35, tzinfo=UTC)  # 14:05 IST
+    common = dict(trade_date=t0.date(), timeframe=5, signal_time=t0, direction=-1, strike=23300,
+                  expiry_date=date(2026, 11, 3), groww_symbol="x", cross_number=2, entry_time=t0,
+                  nifty_entry=23297.0, nifty_exit=23250.0, exit_time=t1, exit_reason="OPPOSITE_CROSS",
+                  status="CLOSED", stale_exit=False, created_at=t0)
+    rows = [PT(mode="ATM_SELL", side="SELL", option_type="CE", entry_price=83.9, entry_fill=82.95,
+               exit_price=70.0, exit_fill=70.85, gross_pnl=903.5, slippage=117.0, charges=60.0,
+               net_pnl=726.5, **common),
+            PT(mode="ATM_BUY", side="BUY", option_type="PE", entry_price=89.5, entry_fill=90.45,
+               exit_price=100.0, exit_fill=99.0, gross_pnl=620.75, slippage=64.0, charges=50.0,
+               net_pnl=-506.75, **common)]
+    msg = summary_message(t0.date(), 5, rows)
+    assert "day report 02 Nov 2026" in msg
+    assert "Trade 1: ▼ SHORT 12:50 → 14:05 opposite cross · NIFTY 23,297 → 23,250" in msg
+    assert "SELL 23300 CE 82.95 → 70.85 · net ₹726" in msg
+    assert "-₹507" in msg and "No order was placed" in msg
+    assert msg.index("ATM buy") < msg.index("Totals")
+    open_row = PT(mode="ITM_BUY", side="BUY", option_type="PE", entry_price=269.7, entry_fill=271.55,
+                  **{**common, "exit_time": None, "exit_reason": None, "nifty_exit": None,
+                     "status": "OPEN"})
+    assert "still OPEN" in summary_message(t0.date(), 5, [open_row])
