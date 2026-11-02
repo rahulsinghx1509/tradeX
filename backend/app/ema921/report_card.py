@@ -124,6 +124,22 @@ def _layout(c: _Canvas, day: date, tf: int, rows: list) -> int:
                  for m, rs in by_mode.items()}
     costs = sum(float(r.slippage or 0) + float(r.charges or 0) for r in rows if r.status == "CLOSED")
 
+    # Total P&L card: every closed leg of the day added up (all modes together)
+    top = c.y
+    total = sum(nets) if nets else None
+    gross_all = sum(float(r.gross_pnl) for r in rows if r.gross_pnl is not None)
+    c.rrect((PAD, top, W - PAD, top + 230), 44, CARD)
+    c.text((PAD + 40, top + 40), "Total P&L today · all modes", f_b, MUTED)
+    col = INK if total is None else GREEN if total > 0 else RED if total < 0 else INK
+    c.text((PAD + 40, top + 90), _rs(total, sign=True), _font(76, True), col)
+    c.text((PAD + 40, top + 182), f"gross {_rs(gross_all) if rows else '–'} · "
+           f"slippage + charges {_rs(costs) if rows else '–'} · {len(nets)} closed leg"
+           f"{'s' if len(nets) != 1 else ''}", f_s, MUTED)
+    if total is not None:
+        c.pill(W - PAD - 40, top + 135, "PROFIT" if total > 0 else "LOSS" if total < 0 else "FLAT",
+               f_bb, col, GREEN_LIGHT if total > 0 else RED_LIGHT if total < 0 else LINE)
+    c.y = top + 230 + 44
+
     # Badges (like a payment app's shortcut row)
     best = max(mode_nets.values()) if mode_nets else None
     badges = [(str(len(by_signal)), "Signals"),

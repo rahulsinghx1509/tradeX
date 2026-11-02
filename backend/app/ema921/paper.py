@@ -187,6 +187,8 @@ def summary_message(day: date, tf: int, rows: list[PaperTrade]) -> str:
         wins = sum(1 for x in nets if x > 0)
         lines.append(f"• {E.MODE_LABELS[mode]}: {len(rs)} trades, {wins} winners, gross {_rs(gross)}, "
                      f"slippage + charges {_rs(costs)}, net {_rs(sum(nets))}")
+    all_nets = [float(r.net_pnl) for r in rows if r.net_pnl is not None]
+    lines.append(f"Total P&L today (all modes): {_rs(sum(all_nets)) if all_nets else '–'}")
     lines.append("Paper trades only. No order was placed.")
     return "\n".join(lines)
 
