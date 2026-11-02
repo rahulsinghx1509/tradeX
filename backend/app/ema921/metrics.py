@@ -67,3 +67,27 @@ def summarize(trades: list[Trade], capital: float) -> Summary:
         whipsaws=sum(1 for t in ordered if t.whipsaw),
         stale_exits=sum(1 for t in ordered if t.stale_exit),
     )
+
+
+def passes_dev_bar(trades: list[Trade], capital: float, start, pf_min: float = 1.10,
+                   max_dd_pct: float = 50.0) -> tuple[bool, str]:
+    """Pass bar for ET-1.0 and ORB-1.0 (docs/01 §22), on the 2 development years from `start`:
+    net > 0, profit factor >= pf_min, each 12-month year net > 0, max drawdown < max_dd_pct."""
+    if not trades:
+        return False, "no trades"
+    s = summarize(trades, capital)
+    try:
+        split = start.replace(year=start.year + 1)
+    except ValueError:  # 29 February
+        split = start.replace(year=start.year + 1, day=28)
+    y1 = sum(t.net_pnl for t in trades if t.day < split)
+    y2 = sum(t.net_pnl for t in trades if t.day >= split)
+    dd = s.max_drawdown_pct or 0.0
+    ok = (s.net_pnl > 0 and (s.profit_factor or 0) >= pf_min and y1 > 0 and y2 > 0
+          and dd < max_dd_pct)
+
+    def rs(x: float) -> str:
+        return f"-₹{abs(x):,.0f}" if x < 0 else f"₹{x:,.0f}"
+
+    return ok, (f"net {rs(s.net_pnl)}, PF {s.profit_factor}, year 1 {rs(y1)}, year 2 {rs(y2)}, "
+                f"max DD {dd:g}%")

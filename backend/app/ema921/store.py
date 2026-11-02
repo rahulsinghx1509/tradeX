@@ -19,6 +19,14 @@ log = logging.getLogger(__name__)
 
 SPOT_SYMBOL = "NSE-NIFTY"
 UNDERLYING = "NIFTY"
+# Index option facts per underlying: (lot size, strike step). BANKNIFTY lot 30 since Jan 2026
+# (docs/01 §1), monthly expiries only; strike step 100 is NOT_VERIFIED for every past date.
+UNDERLYINGS = {"NIFTY": (65, 50), "BANKNIFTY": (30, 100)}
+
+
+def spot_symbol(underlying: str = UNDERLYING) -> str:
+    """Groww's symbol for the index itself ("NSE-<name>", confirmed for NIFTY and BANKNIFTY)."""
+    return f"NSE-{underlying}"
 DONE = ("OK", "EMPTY")
 
 
@@ -125,9 +133,10 @@ def load_minutes(session: Session, symbol: str, start: date, end: date) -> pd.Da
     return frame(rows)
 
 
-def load_spot(session: Session, start: date, end: date, warmup_days: int = 10) -> pd.DataFrame:
-    """NIFTY spot 1m from `warmup_days` calendar days before `start` (EMA warm-up) to `end`."""
-    return load_minutes(session, SPOT_SYMBOL, start - timedelta(days=warmup_days), end)
+def load_spot(session: Session, start: date, end: date, warmup_days: int = 10,
+              underlying: str = UNDERLYING) -> pd.DataFrame:
+    """Index spot 1m from `warmup_days` calendar days before `start` (EMA warm-up) to `end`."""
+    return load_minutes(session, spot_symbol(underlying), start - timedelta(days=warmup_days), end)
 
 
 class DbOptionData:
