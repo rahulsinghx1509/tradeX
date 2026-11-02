@@ -408,3 +408,30 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   the gross edge, so even perfect fills would be about break-even. Per the rules: no held-back
   test, no re-tuning. NIFTY option selling joins the families with no edge after costs.
 
+
+## 22. ORB-1.0 and ET-1.0 on NIFTY and BANKNIFTY options (2026-11-02)
+
+- **RK, 2026-11-02:** asked for strategies with a better profit factor than 9/21 EMA. Ranked
+  comparison: https://claude.ai/artifact/JsR8tZYtiodBDb4umWbzGd (the lever is fewer trades and
+  catching trend days, since friction of ₹220-350 a trade ate the EMA edge). **RK chose (decision
+  card): backtest both** the opening-range breakout and the 9/21 EMA with a trend-day filter.
+  **RK, same day:** do the same testing on BANKNIFTY.
+- Rules fixed before any result (full text in `backend/app/orb/__init__.py` and
+  `backend/app/ema921/trend.py`):
+  - ORB-1.0: range = 1m high/low 09:15-09:29; first 5m close beyond it, 09:35-13:00; one trade a
+    day; stop = a 5m close back beyond the other side (RANGE_STOP); square-off 15:00.
+  - ET-1.0: 5m 9/21 cross, entries 09:30-14:00 only if the last closed 15m bar's EMA9/21 agrees
+    and the close is on the same side of the day's 09:15 open (stands in for VWAP: an index has no
+    volume). Opposite crosses always exit. No trailing stop.
+  - Both: same three modes, fills, slippage (0.5% + 0.5 pt) and cost stack as 9/21 EMA.
+- BANKNIFTY: lot 30, strikes every 100 (NOT_VERIFIED for all past dates), monthly expiries only;
+  spot symbol NSE-BANKNIFTY. Groww's 1-minute depth for expired BANKNIFTY options is
+  NOT_VERIFIED: the load reports empty contract-days.
+- Pass bar (per underlying, strategy and mode, 2 development years, default slippage): net > 0,
+  profit factor >= 1.10, each year net > 0, max drawdown < 50% of ₹1L. 12 rows are scored, so only
+  the single best passing row gets one run on the held-back year (Nov 2023 - Oct 2024): net > 0,
+  profit factor >= 1.05. Nothing is re-tuned.
+- Commands: `ema-load --underlying BANKNIFTY` (EMA legs), `orb-load` and
+  `orb-load --underlying BANKNIFTY` (ORB legs), then `orb-et-backtest`
+  (reports/orb_et_backtest.md, orb_et_trades.csv). Backtest only; nothing here is wired into the
+  paper engine or places orders.

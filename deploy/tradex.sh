@@ -42,6 +42,8 @@ case "${1:-help}" in
   ema-backtest) script ema921_backtest.py "${@:2}" && echo "Report: reports/ema921_backtest.md" ;;
   straddle-load) script straddle_load.py "${@:2}" ;;
   straddle-backtest) script straddle_backtest.py "${@:2}" && echo "Report: reports/straddle_backtest.md" ;;
+  orb-load)   script orb_load.py "${@:2}" ;;
+  orb-et-backtest) script orb_et_backtest.py "${@:2}" && echo "Report: reports/orb_et_backtest.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
@@ -78,10 +80,12 @@ Usage: deploy/tradex.sh <command>
   sources      which free NSE/FRED data files download from here, how far back (reports/data_sources.md)
   intraday-probe what Groww gives for 1/5/15-min candles + NSE index member lists (reports/intraday_probe.md)
   ema-probe    9/21 EMA: how far back Groww keeps 1-min spot + expired-option candles (reports/ema921_probe.md)
-  ema-load     9/21 EMA: load 1-min NIFTY spot + needed options from Groww, last 2 years (--years 3); re-runnable
+  ema-load     9/21 EMA: load 1-min NIFTY spot + needed options from Groww, last 2 years (--years 3, --underlying BANKNIFTY); re-runnable
   ema-backtest 9/21 EMA: backtest 5/15/30-min x 3 modes (reports/ema921_backtest.md, ema921_trades.csv)
   straddle-load ST-1.0 straddle: load ATM + wing option 1-minute candles (--years 3 ok; safe to re-run)
   straddle-backtest ST-1.0 09:20 hedged short straddle backtest (reports/straddle_backtest.md, straddle_trades.csv)
+  orb-load     ORB-1.0 breakout: load the option legs it needs (--underlying BANKNIFTY, --years 3 ok)
+  orb-et-backtest ORB-1.0 breakout + ET-1.0 EMA trend filter on NIFTY and BANKNIFTY, scored on the fixed pass bar
   ema-paper-once 9/21 EMA: run one PAPER-engine step now (the ema-paper service does this every minute)
   stop-paper   stop the 9/21 EMA PAPER engine (it starts again on the next update unless EMA921_PAPER_OFF=1)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)

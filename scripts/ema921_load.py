@@ -8,8 +8,9 @@ Safe to stop (Ctrl+C) and run again: everything already stored is skipped, failu
 Usage (from the repository root):
     python scripts/ema921_load.py                 # the last 2 years
     python scripts/ema921_load.py --years 3
+    python scripts/ema921_load.py --underlying BANKNIFTY
     python scripts/ema921_load.py --from 2025-01-01 --to 2025-03-31
-On the server: deploy/tradex.sh ema-load [--years 3]
+On the server: deploy/tradex.sh ema-load [--years 3] [--underlying BANKNIFTY]
 """
 
 import argparse
@@ -27,6 +28,8 @@ from app.providers.groww import GrowwProvider
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    p.add_argument("--underlying", default="NIFTY", choices=["NIFTY", "BANKNIFTY"],
+                   help="index whose options to load (BANKNIFTY: monthly expiries, lot 30)")
     p.add_argument("--years", type=int, default=2, help="how many years back (default 2)")
     p.add_argument("--from", dest="start", help="first day, YYYY-MM-DD (overrides --years)")
     p.add_argument("--to", dest="end", help="last day, YYYY-MM-DD (default yesterday)")
@@ -41,9 +44,9 @@ def main() -> int:
     except ProviderError as exc:
         print(f"Cannot reach Groww: {exc}")
         return 1
-    print(f"Loading 1-minute history {start} to {end}. Safe to stop and re-run.")
+    print(f"Loading {args.underlying} 1-minute history {start} to {end}. Safe to stop and re-run.")
     with get_sessionmaker()() as session:
-        rep = L.load_all(session, provider.client(), start, end)
+        rep = L.load_all(session, provider.client(), start, end, underlying=args.underlying)
     print(f"\nSpot days loaded {rep.spot_days} (empty {rep.spot_empty}); expiries {rep.expiries}; "
           f"option contract-days needed {rep.contracts_needed}, loaded {rep.contract_days_fetched} "
           f"(empty {rep.contract_days_empty}).")

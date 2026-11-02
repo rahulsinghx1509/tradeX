@@ -29,11 +29,12 @@ import pandas as pd
 from app.core.market_time import IST, is_trading_day
 from app.ema921 import bars as B
 from app.ema921 import costs as C
+from app.ema921 import trend as T
 
 MODES = ("ITM_BUY", "ATM_BUY", "ATM_SELL")
 MODE_LABELS = {"ITM_BUY": "Deep ITM buy", "ATM_BUY": "ATM buy", "ATM_SELL": "ATM sell"}
 EXIT_LABELS = {"OPPOSITE_CROSS": "opposite cross", "TRAIL_STOP": "trailing stop",
-               "SQUARE_OFF": "15:00 square-off"}
+               "RANGE_STOP": "range stop", "SQUARE_OFF": "15:00 square-off"}
 START_CHOICES = (time(9, 30), time(10, 0), time(10, 30))
 CUTOFF_CHOICES = tuple(time(h, m) for h, m in
                        [(11, 30), (12, 0), (12, 30), (13, 0), (13, 30), (14, 0), (14, 30)])
@@ -59,6 +60,7 @@ class Config:
     whipsaw_bars: int = 2  # (#19)
     stop_atr_mult: float | None = 2.0  # chandelier trailing stop on spot; None or 0 = off
     atr_period: int = 14
+    trend_filter: bool = False  # ET-1.0 (app/ema921/trend.py): entries only with the 15m trend
 
     @property
     def qty(self) -> int:
@@ -258,6 +260,7 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
             _Bar(r.bar_close, float(r.high), float(r.low), float(r.close), float(r.atr)))
     all_crosses = B.crosses(signal_bars)
     days, why = no_trade_days(spot, start, end, cfg, holidays, as_of)
+    blocked = T.blocked(spot, all_crosses) if cfg.trend_filter else frozenset()
     by_day: dict[date, list[B.Cross]] = {}
     for c in all_crosses:
         by_day.setdefault(c.day, []).append(c)
@@ -279,7 +282,8 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
         made = 0
         for mode in modes:
             day_trades = _run_day(mode, d, crosses_today, options, expiries, cfg, minutes,
-                                  skips, bar_index, spot_px, as_of, bars_by_day.get(d, []))
+                                  skips, bar_index, spot_px, as_of, bars_by_day.get(d, []),
+                                  blocked)
             trades[mode].extend(day_trades)
             made += len(day_trades)
         if not made:
@@ -287,14 +291,18 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
                 why[d] = "NO_CROSS"
             elif not any(_entry_allowed(c, cfg) for c in crosses_today):
                 why[d] = "NO_CROSS_IN_WINDOW"
+            elif not any(_entry_allowed(c, cfg, blocked) for c in crosses_today):
+                why[d] = "TREND_FILTER"
             else:
                 why[d] = "ENTRIES_SKIPPED (no option data)"
     return Result(cfg, trades, skips, dict(sorted(why.items())), days)
 
 
-def _entry_allowed(c: B.Cross, cfg: Config) -> bool:
+def _entry_allowed(c: B.Cross, cfg: Config, blocked: frozenset = frozenset()) -> bool:
     t = c.bar_close.time()
     if not (cfg.start <= t <= cfg.cutoff):
+        return False
+    if c.bar_close in blocked:  # ET-1.0 trend filter said no (exits are never blocked)
         return False
     return cfg.cross_numbers is None or c.number in cfg.cross_numbers
 
@@ -366,7 +374,8 @@ def _pending(as_of: pd.Timestamp | None, t: pd.Timestamp, cfg: Config) -> bool:
 
 
 def _run_day(mode, d, crosses_today, options, expiries, cfg, minutes, skips, bar_index,
-             spot, as_of=None, day_bars: list[_Bar] | None = None) -> list[Trade]:
+             spot, as_of=None, day_bars: list[_Bar] | None = None,
+             blocked: frozenset = frozenset()) -> list[Trade]:
     out: list[Trade] = []
     open_trade: Trade | None = None
     day_bars = day_bars or []
@@ -395,7 +404,7 @@ def _run_day(mode, d, crosses_today, options, expiries, cfg, minutes, skips, bar
             open_trade = None
             if not closed:  # exit still waiting for its candle; nothing later is known yet
                 return out
-        if _entry_allowed(c, cfg):
+        if _entry_allowed(c, cfg, blocked):
             open_trade = _open(mode, d, c, options, expiries, cfg, minutes, skips, as_of)
     if open_trade is not None:
         t = _ist(d, cfg.square_off)

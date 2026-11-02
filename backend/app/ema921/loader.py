@@ -91,13 +91,14 @@ def _fetch_and_store(session: Session, client: Any, symbol: str, segment: str, d
 
 
 def load_spot(session: Session, client: Any, start: date, end: date, rep: LoadReport,
-              log: Callable[[str], None] = print) -> None:
+              log: Callable[[str], None] = print, underlying: str = S.UNDERLYING) -> None:
     days = trading_days(start - timedelta(days=WARMUP_CALENDAR_DAYS), end)
-    done = S.done_set(session, S.SPOT_SYMBOL)
-    todo = [d for d in days if (S.SPOT_SYMBOL, d) not in done]
-    log(f"NIFTY spot: {len(days) - len(todo)} days already stored, {len(todo)} to fetch")
+    sym = S.spot_symbol(underlying)
+    done = S.done_set(session, sym)
+    todo = [d for d in days if (sym, d) not in done]
+    log(f"{underlying} spot: {len(days) - len(todo)} days already stored, {len(todo)} to fetch")
     for i, d in enumerate(todo, 1):
-        n = _fetch_and_store(session, client, S.SPOT_SYMBOL, "CASH", d, rep)
+        n = _fetch_and_store(session, client, sym, "CASH", d, rep)
         if n:
             rep.spot_days += 1
         elif n == 0:
@@ -115,26 +116,26 @@ def _months(start: date, end: date) -> list[tuple[int, int]]:
 
 
 def load_expiries(session: Session, client: Any, start: date, end: date, rep: LoadReport,
-                  log: Callable[[str], None] = print) -> None:
+                  log: Callable[[str], None] = print, underlying: str = S.UNDERLYING) -> None:
     """Expiry dates for every month of the range, plus the next month (trades near month-end
     can use next month's first expiry). Months already stored are skipped, except the last two."""
-    key = f"EXPIRIES:{S.UNDERLYING}"
+    key = f"EXPIRIES:{underlying}"
     months = _months(start, end + timedelta(days=31))
     for k, (y, m) in enumerate(months):
         first = date(y, m, 1)
         if k < len(months) - 2 and S.fetched(session, key, first):
             continue
         try:
-            raw = (client.get_expiries(exchange="NSE", underlying_symbol=S.UNDERLYING, year=y,
+            raw = (client.get_expiries(exchange="NSE", underlying_symbol=underlying, year=y,
                                        month=m) or {}).get("expiries") or []
         except Exception as exc:
             rep.errors.append(f"expiries {y}-{m:02d}: {str(exc)[:200]}")
             continue
         days = sorted({date.fromisoformat(str(e)[:10]) for e in raw})
-        S.save_expiries(session, S.UNDERLYING, days)
+        S.save_expiries(session, underlying, days)
         S.record_fetch(session, key, first, len(days), "OK" if days else "EMPTY")
         session.commit()
-    rep.expiries = len(S.expiries(session))
+    rep.expiries = len(S.expiries(session, underlying))
     log(f"Expiries stored: {rep.expiries}")
 
 
@@ -154,24 +155,26 @@ def needed_legs(spot: pd.DataFrame, start: date, end: date,
     return need
 
 
-def load_contracts(session: Session, client: Any, expiry_list: list[date], rep: LoadReport) -> None:
-    key = f"CONTRACTS:{S.UNDERLYING}"
+def load_contracts(session: Session, client: Any, expiry_list: list[date], rep: LoadReport,
+                   underlying: str = S.UNDERLYING) -> None:
+    key = f"CONTRACTS:{underlying}"
     for e in expiry_list:
         if S.fetched(session, key, e):
             continue
         try:
-            raw = (client.get_contracts(exchange="NSE", underlying_symbol=S.UNDERLYING,
+            raw = (client.get_contracts(exchange="NSE", underlying_symbol=underlying,
                                         expiry_date=e.isoformat()) or {}).get("contracts") or []
         except Exception as exc:
             rep.errors.append(f"contracts {e}: {str(exc)[:200]}")
             continue
         parsed = [(str(s), *p) for s in raw if (p := parse_contract(s))]
-        S.save_contracts(session, S.UNDERLYING, e, parsed)
+        S.save_contracts(session, underlying, e, parsed)
         S.record_fetch(session, key, e, len(parsed), "OK" if parsed else "EMPTY")
         session.commit()
 
 
-def guess_symbol(session: Session, expiry: date, strike: float, option_type: str) -> str:
+def guess_symbol(session: Session, expiry: date, strike: float, option_type: str,
+                 underlying: str = S.UNDERLYING) -> str:
     """Groww's symbol for a contract its list left out, built like the listed ones of the same
     expiry (e.g. NSE-NIFTY-03Nov26-22850-CE). Only used if Groww then returns candles for it."""
     from sqlalchemy import select
@@ -179,18 +182,19 @@ def guess_symbol(session: Session, expiry: date, strike: float, option_type: str
     from app.db.models import OptionContract
 
     listed = session.scalar(select(OptionContract.groww_symbol).where(
-        OptionContract.underlying == S.UNDERLYING, OptionContract.expiry_date == expiry,
+        OptionContract.underlying == underlying, OptionContract.expiry_date == expiry,
         OptionContract.option_type.is_not(None)).limit(1))
-    prefix = listed.rsplit("-", 2)[0] if listed else f"NSE-{S.UNDERLYING}-{expiry:%d%b%y}"
+    prefix = listed.rsplit("-", 2)[0] if listed else f"NSE-{underlying}-{expiry:%d%b%y}"
     return f"{prefix}-{strike:g}-{option_type}"
 
 
 def try_unlisted(session: Session, client: Any, expiry: date, strike: float, option_type: str,
-                 day: date, rep: LoadReport, live: bool = False) -> str | None:
+                 day: date, rep: LoadReport, live: bool = False,
+                 underlying: str = S.UNDERLYING) -> str | None:
     """get_contracts skips some strikes that do trade (server probe 2026-11-01: 22850 and 24600
     were missing while 50-point neighbours were listed). Ask Groww for the guessed symbol's
     candles; if any come back the contract is real and is recorded. Never invents prices."""
-    sym = guess_symbol(session, expiry, strike, option_type)
+    sym = guess_symbol(session, expiry, strike, option_type, underlying)
     if live:  # today is still trading: store what exists, but don't mark the day as fetched
         try:
             candles = fetch_day(client, sym, "FNO", day)
@@ -203,7 +207,7 @@ def try_unlisted(session: Session, client: Any, expiry: date, strike: float, opt
     else:
         n = _fetch_and_store(session, client, sym, "FNO", day, rep) or 0
     if n:
-        S.save_contracts(session, S.UNDERLYING, expiry, [(sym, strike, option_type)])
+        S.save_contracts(session, underlying, expiry, [(sym, strike, option_type)])
         session.commit()
         return sym
     return None
@@ -211,30 +215,39 @@ def try_unlisted(session: Session, client: Any, expiry: date, strike: float, opt
 
 def load_options(session: Session, client: Any, spot: pd.DataFrame, start: date, end: date,
                  rep: LoadReport, cfg: E.Config | None = None,
-                 log: Callable[[str], None] = print) -> None:
+                 log: Callable[[str], None] = print, underlying: str = S.UNDERLYING) -> None:
     cfg = cfg or E.Config()
     legs = needed_legs(spot, start, end, cfg)
-    expiry_list = S.expiries(session)
+    expiry_list = S.expiries(session, underlying)
     by_leg = {(d, k, t): E.pick_expiry(d, expiry_list, cfg.roll_on_expiry_day) for d, k, t in legs}
-    needed_expiries = sorted({e for e in by_leg.values() if e})
-    load_contracts(session, client, needed_expiries, rep)
-    data = S.DbOptionData(session)
-    todo: list[tuple[str, date]] = []
-    missing_contract = 0
-    for (d, k, t), e in sorted(by_leg.items()):
-        sym = data.contract(e, k, t) if e else None
-        if sym is None and e is not None:
-            sym = try_unlisted(session, client, e, k, t, d, rep)
+    no_expiry = sum(1 for e in by_leg.values() if e is None)
+    if no_expiry:
+        log(f"{no_expiry} legs have no listed expiry and are left out")
+    fetch_legs(session, client, [(d, e, k, t) for (d, k, t), e in sorted(by_leg.items()) if e],
+               rep, underlying, "Options", log)
+
+
+def fetch_legs(session: Session, client: Any, legs: list[tuple[date, date, float, str]],
+               rep: LoadReport, underlying: str = S.UNDERLYING, label: str = "Legs",
+               log: Callable[[str], None] = print) -> None:
+    """Fetch the 1m candles of each (day, expiry, strike, CE/PE). Contracts Groww's list leaves
+    out are tried directly; days already stored are skipped. Used by the ORB loader."""
+    load_contracts(session, client, sorted({e for _, e, _, _ in legs}), rep, underlying)
+    data = S.DbOptionData(session, underlying)
+    todo, missing = [], 0
+    for d, e, k, t in legs:
+        sym = data.contract(e, k, t) or try_unlisted(session, client, e, k, t, d, rep,
+                                                     underlying=underlying)
         if sym is None:
-            missing_contract += 1
+            missing += 1
         else:
             todo.append((sym, d))
     todo = sorted(set(todo), key=lambda x: (x[1], x[0]))
     rep.contracts_needed = len(todo)
-    done = S.done_set(session, f"NSE-{S.UNDERLYING}-")
+    done = S.done_set(session, f"NSE-{underlying}-")
     todo = [x for x in todo if x not in done]
-    log(f"Options: {rep.contracts_needed} contract-days needed, {len(todo)} to fetch"
-        + (f", {missing_contract} legs with no listed contract" if missing_contract else ""))
+    log(f"{label}: {rep.contracts_needed} contract-days needed, {len(todo)} to fetch"
+        + (f", {missing} legs with no contract" if missing else ""))
     for i, (sym, d) in enumerate(todo, 1):
         n = _fetch_and_store(session, client, sym, "FNO", d, rep)
         if n:
@@ -242,16 +255,22 @@ def load_options(session: Session, client: Any, spot: pd.DataFrame, start: date,
         elif n == 0:
             rep.contract_days_empty += 1
         if i % 100 == 0:
-            log(f"  options {i}/{len(todo)} ({d})")
+            log(f"  {label.lower()} {i}/{len(todo)} ({d})")
+
+
+def config_for(underlying: str, **kw) -> E.Config:
+    """The engine Config with the underlying's lot size and strike step (store.UNDERLYINGS)."""
+    lot, step = S.UNDERLYINGS[underlying]
+    return E.Config(lot_size=lot, strike_step=step, **kw)
 
 
 def load_all(session: Session, client: Any, start: date, end: date,
-             log: Callable[[str], None] = print) -> LoadReport:
+             log: Callable[[str], None] = print, underlying: str = S.UNDERLYING) -> LoadReport:
     rep = LoadReport()
-    load_spot(session, client, start, end, rep, log)
-    load_expiries(session, client, start, end, rep, log)
-    spot = S.load_spot(session, start, end, WARMUP_CALENDAR_DAYS)
-    load_options(session, client, spot, start, end, rep, log=log)
+    load_spot(session, client, start, end, rep, log, underlying)
+    load_expiries(session, client, start, end, rep, log, underlying)
+    spot = S.load_spot(session, start, end, WARMUP_CALENDAR_DAYS, underlying)
+    load_options(session, client, spot, start, end, rep, config_for(underlying), log, underlying)
     return rep
 
 
