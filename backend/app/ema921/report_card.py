@@ -100,7 +100,7 @@ class _Canvas:
         self.text((right_x - w / 2, cy), s, font, fg, anchor="mm")
 
 
-def _layout(c: _Canvas, day: date, tf: int, rows: list) -> int:
+def _layout(c: _Canvas, day: date, tf: int, rows: list, qty: int) -> int:
     f_title, f_sub = _font(50, True), _font(30)
     f_h, f_b, f_bb, f_s = _font(40, True), _font(32), _font(32, True), _font(27)
     f_badge, f_badge_lbl = _font(34, True), _font(28)
@@ -123,6 +123,22 @@ def _layout(c: _Canvas, day: date, tf: int, rows: list) -> int:
     mode_nets = {m: sum(float(r.net_pnl) for r in rs if r.net_pnl is not None)
                  for m, rs in by_mode.items()}
     costs = sum(float(r.slippage or 0) + float(r.charges or 0) for r in rows if r.status == "CLOSED")
+
+    # Total P&L card: every closed leg of the day added up (all modes together)
+    top = c.y
+    total = sum(nets) if nets else None
+    gross_all = sum(float(r.gross_pnl) for r in rows if r.gross_pnl is not None)
+    c.rrect((PAD, top, W - PAD, top + 230), 44, CARD)
+    c.text((PAD + 40, top + 40), "Total P&L today · all modes", f_b, MUTED)
+    col = INK if total is None else GREEN if total > 0 else RED if total < 0 else INK
+    c.text((PAD + 40, top + 90), _rs(total, sign=True), _font(76, True), col)
+    c.text((PAD + 40, top + 182), f"gross {_rs(gross_all) if rows else '–'} · "
+           f"slippage + charges {_rs(costs) if rows else '–'} · {len(nets)} closed leg"
+           f"{'s' if len(nets) != 1 else ''}", f_s, MUTED)
+    if total is not None:
+        c.pill(W - PAD - 40, top + 135, "PROFIT" if total > 0 else "LOSS" if total < 0 else "FLAT",
+               f_bb, col, GREEN_LIGHT if total > 0 else RED_LIGHT if total < 0 else LINE)
+    c.y = top + 230 + 44
 
     # Badges (like a payment app's shortcut row)
     best = max(mode_nets.values()) if mode_nets else None
@@ -177,57 +193,33 @@ def _layout(c: _Canvas, day: date, tf: int, rows: list) -> int:
             net = None if r.net_pnl is None else float(r.net_pnl)
             good = net is not None and net > 0
             icon = {"ITM_BUY": "ITM", "ATM_BUY": "ATM", "ATM_SELL": "SELL"}.get(r.mode, "?")
+            money = None if r.entry_fill is None else float(r.entry_fill) * qty
+            if r.side == "BUY":
+                pct = f" · {net / money * 100:+.1f}%" if money and net is not None else ""
+                cash = f"Invested {_rs(money)} · P&L {_rs(net, sign=True)}{pct}"
+            else:  # a sale takes in premium; the margin it blocks is not modelled
+                cash = f"Premium got {_rs(money)} · P&L {_rs(net, sign=True)} · margin n/a"
 
-            def draw_leg(y=y, label=label, leg=leg, net=net, good=good, icon=icon):
-                c.rrect((PAD + 40, y, PAD + 128, y + 88), 22, BLUE_LIGHT)
+            def draw_leg(y=y, label=label, leg=leg, net=net, good=good, icon=icon, cash=cash):
+                c.rrect((PAD + 40, y + 20, PAD + 128, y + 108), 22, BLUE_LIGHT)
                 fi = _font(24 if len(icon) > 3 else 26, True)
-                c.text((PAD + 84, y + 44), icon, fi, BLUE, anchor="mm")
-                c.text((PAD + 152, y + 6), label, f_b)
-                c.text((PAD + 152, y + 50), leg, f_s, MUTED)
+                c.text((PAD + 84, y + 64), icon, fi, BLUE, anchor="mm")
+                c.text((PAD + 152, y + 4), label, f_b)
+                c.text((PAD + 152, y + 48), leg, f_s, MUTED)
+                c.text((PAD + 152, y + 88), cash, f_s, INK)
                 if net is None:
-                    c.pill(W - PAD - 40, y + 44, "open", f_bb, MUTED, LINE)
+                    c.pill(W - PAD - 40, y + 30, "open", f_bb, MUTED, LINE)
                 else:
-                    c.pill(W - PAD - 40, y + 44, _rs(net, sign=True), f_bb,
+                    c.pill(W - PAD - 40, y + 30, _rs(net, sign=True), f_bb,
                            GREEN if good else RED, GREEN_LIGHT if good else RED_LIGHT)
             row(draw_leg)
-            y += 118
+            y += 150
         y += 10
     bottom = y + 10
     c.rrect((PAD, top, W - PAD, bottom), 44, CARD)
     for fn in inner:
         fn()
     c.y = bottom + 36
-
-    # Totals card
-    if by_mode:
-        top = c.y
-        inner = []
-        y = top + 44
-        row(lambda y=y: c.text((PAD + 40, y), "Totals per mode", f_h))
-        y += 80
-        for m in E.MODES:
-            rs = by_mode.get(m)
-            if not rs:
-                continue
-            gross = sum(float(r.gross_pnl) for r in rs if r.gross_pnl is not None)
-            cost = sum(float(r.slippage or 0) + float(r.charges or 0) for r in rs if r.status == "CLOSED")
-            wins = sum(1 for r in rs if r.net_pnl is not None and float(r.net_pnl) > 0)
-            net = mode_nets.get(m, 0.0)
-            detail = (f"{len(rs)} trade{'s' if len(rs) != 1 else ''} · {wins} won · "
-                      f"gross {_rs(gross)} · costs {_rs(cost)}")
-
-            def draw_tot(y=y, m=m, detail=detail, net=net):
-                c.text((PAD + 40, y), E.MODE_LABELS.get(m, m), f_b)
-                c.text((PAD + 40, y + 44), detail, f_s, MUTED)
-                c.text((W - PAD - 40, y + 22), _rs(net, sign=True), f_h,
-                       GREEN if net > 0 else RED if net < 0 else INK, anchor="rm")
-            row(draw_tot)
-            y += 104
-        bottom = y + 6
-        c.rrect((PAD, top, W - PAD, bottom), 44, CARD)
-        for fn in inner:
-            fn()
-        c.y = bottom + 36
 
     # Footer card
     top = c.y
@@ -240,11 +232,11 @@ def _layout(c: _Canvas, day: date, tf: int, rows: list) -> int:
     return int(c.y)
 
 
-def render_png(day: date, tf: int, rows: list) -> bytes:
-    """PNG bytes of the day report for these paper_trades rows."""
-    h = _layout(_Canvas(10, draw=False), day, tf, rows)
+def render_png(day: date, tf: int, rows: list, qty: int = 65) -> bytes:
+    """PNG bytes of the day report for these paper_trades rows (qty = units per trade)."""
+    h = _layout(_Canvas(10, draw=False), day, tf, rows, qty)
     c = _Canvas(h, draw=True)
-    _layout(c, day, tf, rows)
+    _layout(c, day, tf, rows, qty)
     buf = io.BytesIO()
     c.img.save(buf, format="PNG", optimize=True)
     return buf.getvalue()

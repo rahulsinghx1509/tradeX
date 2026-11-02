@@ -187,6 +187,8 @@ def summary_message(day: date, tf: int, rows: list[PaperTrade]) -> str:
         wins = sum(1 for x in nets if x > 0)
         lines.append(f"• {E.MODE_LABELS[mode]}: {len(rs)} trades, {wins} winners, gross {_rs(gross)}, "
                      f"slippage + charges {_rs(costs)}, net {_rs(sum(nets))}")
+    all_nets = [float(r.net_pnl) for r in rows if r.net_pnl is not None]
+    lines.append(f"Total P&L today (all modes): {_rs(sum(all_nets)) if all_nets else '–'}")
     lines.append("Paper trades only. No order was placed.")
     return "\n".join(lines)
 
@@ -243,7 +245,7 @@ def step(session: Session, client: Any, notifier: Any, cfg: E.Config, modes: tup
             if hasattr(notifier, "send_photo"):  # the same report as a picture; text already went
                 try:
                     from app.ema921.report_card import render_png
-                    notifier.send_photo(render_png(today, cfg.timeframe, rows),
+                    notifier.send_photo(render_png(today, cfg.timeframe, rows, cfg.qty),
                                         f"PAPER day report {today:%d %b %Y}. No order was placed.")
                 except Exception:  # a picture problem must never stop the paper engine
                     log.exception("day report picture not sent")

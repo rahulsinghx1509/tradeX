@@ -174,6 +174,7 @@ def test_day_report_lists_every_trade_and_totals():
     assert "Trade 1: ▼ SHORT 12:50 → 14:05 opposite cross · NIFTY 23,297 → 23,250" in msg
     assert "SELL 23300 CE 82.95 → 70.85 · net ₹726" in msg
     assert "-₹507" in msg and "No order was placed" in msg
+    assert "Total P&L today (all modes): ₹220" in msg
     assert msg.index("ATM buy") < msg.index("Totals")
     open_row = PT(mode="ITM_BUY", side="BUY", option_type="PE", entry_price=269.7, entry_fill=271.55,
                   **{**common, "exit_time": None, "exit_reason": None, "nifty_exit": None,
