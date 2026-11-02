@@ -76,6 +76,26 @@ class TelegramNotifier:
             desc = body.get("description", "")
             raise AlertError(f"Telegram rejected the message: HTTP {resp.status_code} {desc}")
 
+    def send_photo(self, png: bytes, caption: str = "") -> None:
+        """Send a PNG picture to every chat (same error handling as send)."""
+        errors = []
+        for n, chat in enumerate(self._chat_ids, start=1):
+            try:
+                resp = self._client.post(self._url("sendPhoto"),
+                                         data={"chat_id": chat, "caption": caption[:1000]},
+                                         files={"photo": ("report.png", png, "image/png")})
+                body = resp.json() if resp.headers.get("content-type", "").startswith(
+                    "application/json") else {}
+                if resp.status_code != 200 or not body.get("ok"):
+                    raise AlertError(f"Telegram rejected the photo: HTTP {resp.status_code} "
+                                     f"{body.get('description', '')}")
+            except httpx.HTTPError as exc:
+                errors.append(f"chat {n}: could not reach Telegram ({type(exc).__name__})")
+            except AlertError as exc:
+                errors.append(f"chat {n}: {exc}")
+        if errors:
+            raise AlertError("; ".join(errors))
+
     def recent_chat_ids(self) -> list[dict]:
         """Chats that have messaged the bot recently (used to find TELEGRAM_CHAT_ID)."""
         resp = self._client.get(self._url("getUpdates"))
@@ -95,6 +115,9 @@ class ConsoleNotifier:
 
     def send(self, text: str) -> None:
         print(f"[ALERT - Telegram not configured]\n{text}")
+
+    def send_photo(self, png: bytes, caption: str = "") -> None:
+        print(f"[ALERT - Telegram not configured] picture ({len(png):,} bytes): {caption}")
 
 
 def get_notifier(settings: Settings) -> TelegramNotifier | ConsoleNotifier:

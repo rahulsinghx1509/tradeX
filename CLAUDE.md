@@ -67,6 +67,7 @@ Read these before doing any work:
 - `backend/app/ema921/` – 9/21 EMA options backtest: bars/crosses, costs, engine, metrics, 1m store, Groww loader, probe,
   `web.py` + `static/` Flask trade viewer (GET only; `ema` compose service behind Caddy at `/ema/`).
   `paper.py` re-runs the same engine each minute (`as_of`) and records `paper_trades`; never orders.
+  `report_card.py` draws the 15:05 day report as a PNG (Pillow) for Telegram.
 - `scripts/` – backfill, collector, Telegram helpers, Groww capability check.
 - `deploy/` – server Docker Compose (db, migrate, api, collector, dashboard, caddy), `tradex.sh` everyday commands,
   setup, nightly backup and 5-minute auto-update from `main`. Merging to `main` deploys to the server.

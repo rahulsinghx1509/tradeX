@@ -119,3 +119,19 @@ def test_collector_refreshes_contracts_each_morning(session, provider):
     run_cycle(session, provider, rec, CollectorState(), ist(15, 11, 0))
     assert not expired.is_active  # an expired contract stops being polled (no daily false alarms)
     assert not any("data problem" in m for m in rec.messages)
+
+
+def test_telegram_send_photo_uploads_png():
+    seen = {}
+
+    def handler(request):
+        seen["url"], seen["body"] = str(request.url), request.read()
+        return httpx.Response(200, json={"ok": True})
+
+    notifier_with(handler).send_photo(b"\x89PNGfake", "cap")
+    assert seen["url"].endswith("/sendPhoto")
+    assert b"\x89PNGfake" in seen["body"] and b"cap" in seen["body"] and b"42" in seen["body"]
+    bad = notifier_with(lambda r: httpx.Response(400, json={"ok": False, "description": "nope"}))
+    with pytest.raises(AlertError, match="nope"):
+        bad.send_photo(b"x")
+    assert TOKEN not in str(pytest.raises(AlertError, bad.send_photo, b"x").value)

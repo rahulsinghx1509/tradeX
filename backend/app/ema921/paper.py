@@ -8,7 +8,8 @@ Every minute during market hours it:
 4. compares the result with the paper_trades table: a new trade sends a PAPER ENTRY message,
    a newly filled exit sends a PAPER EXIT message (one Telegram message per signal, all modes
    together);
-5. after 15:05 sends one end-of-day trade report (every trade, then totals per mode).
+5. after 15:05 sends one end-of-day trade report (every trade, then totals per mode),
+   as text and then as a picture (report_card.py).
 
 This is PAPER ONLY. It never places, modifies or cancels an order: the Groww calls it makes
 are get_historical_candles, get_expiries and get_contracts (a test checks this).
@@ -239,6 +240,13 @@ def step(session: Session, client: Any, notifier: Any, cfg: E.Config, modes: tup
                 PaperTrade.trade_date == today, PaperTrade.timeframe == cfg.timeframe)))
             notifier.send(summary_message(today, cfg.timeframe, rows))
             state.summary_sent = True
+            if hasattr(notifier, "send_photo"):  # the same report as a picture; text already went
+                try:
+                    from app.ema921.report_card import render_png
+                    notifier.send_photo(render_png(today, cfg.timeframe, rows),
+                                        f"PAPER day report {today:%d %b %Y}. No order was placed.")
+                except Exception:  # a picture problem must never stop the paper engine
+                    log.exception("day report picture not sent")
             return "day report sent"
         return "closed for the day"
 

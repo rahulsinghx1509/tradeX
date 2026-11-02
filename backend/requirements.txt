@@ -17,3 +17,5 @@ pyotp>=2.9
 # 9/21 EMA trade viewer (backend/app/ema921/web.py), served by waitress
 flask==3.1.2
 waitress==3.0.2
+# Picture version of the PAPER day report (backend/app/ema921/report_card.py)
+pillow==12.3.0
