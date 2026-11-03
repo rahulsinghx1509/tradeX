@@ -78,4 +78,5 @@ Read these before doing any work:
 - `scripts/` – backfill, collector, Telegram helpers, Groww capability check.
 - `deploy/` – server Docker Compose (db, migrate, api, collector, dashboard, caddy), `tradex.sh` everyday commands,
   setup, nightly backup and 5-minute auto-update from `main`. Merging to `main` deploys to the server.
+- `backend/app/stocks/` – intraday stocks (NIFTY 50 + Next 50): 5-minute loader (`tradex.sh stock-load`).
 - Tests: `cd backend && python -m pytest` (SQLite); set `TEST_DATABASE_URL` to run on PostgreSQL.

@@ -462,3 +462,17 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   15:05 day report by trade number. Stale NIFTY data (> 3 min) = NO TRADE.
 - The older `ema-paper` service (all three modes of 9/21 EMA) keeps running; switch it off with
   EMA921_PAPER_OFF=1 if the EMA-921 messages feel doubled.
+
+## 24. Intraday stocks: NIFTY 50 + NIFTY Next 50 (2026-11-03)
+
+- After every NIFTY/BANKNIFTY option strategy failed (§20-§22), RK chose intraday **stocks**:
+  all NIFTY 50 + NIFTY Next 50 members. Backtest setups first, then a live server scan every
+  5 minutes with numbered PAPER Telegram alerts (entry, quantity, stop-loss, target, exit).
+  PAPER until a setup passes and RK approves. Never orders. Claude does not watch charts
+  live: the server's fixed rules do.
+- Data: `tradex.sh stock-load` downloads NSE's two member lists (table `stock_members`), then
+  5-minute candles per stock and NIFTY from Groww (`stock_candles`, fetch log `stock_fetches`)
+  in 30-day windows, newest first, up to 3 years. Groww's depth for 5-minute stock candles is
+  NOT_VERIFIED until it runs. Today's members only, so older history has survivorship bias.
+- Setups, sizing, costs and pass bar: IS-1.0, `backend/app/stocks/rules.py` (next PR; fixed before any
+  result).

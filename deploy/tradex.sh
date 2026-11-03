@@ -43,6 +43,7 @@ case "${1:-help}" in
   straddle-load) script straddle_load.py "${@:2}" ;;
   straddle-backtest) script straddle_backtest.py "${@:2}" && echo "Report: reports/straddle_backtest.md" ;;
   orb-load)   script orb_load.py "${@:2}" ;;
+  stock-load) script stock_load.py "${@:2}" ;;
   orb-et-backtest) script orb_et_backtest.py "${@:2}" && echo "Report: reports/orb_et_backtest.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
@@ -86,6 +87,7 @@ Usage: deploy/tradex.sh <command>
   straddle-backtest ST-1.0 09:20 hedged short straddle backtest (reports/straddle_backtest.md, straddle_trades.csv)
   orb-load     ORB-1.0 breakout: load the option legs it needs (--underlying BANKNIFTY, --years 3 ok)
   orb-et-backtest ORB-1.0 breakout + ET-1.0 EMA trend filter on NIFTY and BANKNIFTY, scored on the fixed pass bar
+  stock-load   intraday stocks: NIFTY 50 + Next 50 member lists + 5-minute candles from Groww, 3 years (safe to re-run)
   ema-paper-once 9/21 EMA: run one PAPER-engine step now (the ema-paper service does this every minute)
   stop-paper   stop the 9/21 EMA PAPER engine (it starts again on the next update unless EMA921_PAPER_OFF=1)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)
