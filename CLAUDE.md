@@ -55,7 +55,7 @@ Read these before doing any work:
   `backend/app/straddle/`. Result: FAIL (net −₹1.86L over 2 years, PF 0.65); no held-back test.
 - 🔀 2026-11-02 RK: backtest ORB-1.0 (opening-range breakout) and ET-1.0 (9/21 EMA + 15m trend
   filter) on NIFTY and BANKNIFTY options, pass bar fixed first (docs/01 §22). `backend/app/orb/`,
-  `ema921/trend.py`, `tradex.sh orb-load` / `orb-et-backtest`. Result pending RK's server run.
+  `ema921/trend.py`, `tradex.sh orb-load` / `orb-et-backtest`. Result 2026-11-03: all 12 rows FAIL (best NIFTY ET ATM sell, PF 1.05). Auto-trading on hold.
 - 🔀 2026-11-03 RK: EMA-921, ORB-1.0 and ET-1.0 run live as numbered PAPER signals (`backend/app/live/`,
   `signals` service, table `signal_trades`; docs/01 §23). Real alerts only after a strategy passes and RK approves.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),

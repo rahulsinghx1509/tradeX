@@ -435,6 +435,14 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   `orb-load --underlying BANKNIFTY` (ORB legs), then `orb-et-backtest`
   (reports/orb_et_backtest.md, orb_et_trades.csv). Backtest only; nothing here is wired into the
   paper engine or places orders.
+- Result (RK's server run, 2026-11-03; Nov 2024 - Oct 2026, default slippage, 4,110 trades):
+  **all 12 rows FAIL**, so no held-back-year run and no re-tune.
+  - NIFTY ORB: net -₹1.69L to -₹3.13L, PF 0.75-0.78, max DD 174-309%.
+  - NIFTY ET: gross positive in all modes (+₹30k to +₹66k) but net: ATM sell +₹8.6k (PF 1.05;
+    year 1 +₹23.8k, year 2 -₹15.2k), ATM buy -₹19.6k (0.91), Deep ITM buy -₹11.1k (0.96).
+  - BANKNIFTY ORB: net -₹2.17L to -₹4.33L, PF 0.64-0.75. BANKNIFTY ET: net -₹0.89L to -₹1.47L,
+    PF 0.52-0.61. Both lose even before costs.
+  - 2026-11-03 RK: auto algo trading plan put ON HOLD (no strategy has passed).
 
 ## 23. Three strategies live as numbered PAPER signals (2026-11-03)
 
