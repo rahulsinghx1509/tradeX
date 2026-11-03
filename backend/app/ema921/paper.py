@@ -226,8 +226,11 @@ def _upsert(session: Session, tf: int, t: E.Trade, now: datetime) -> tuple[str |
 
 
 def step(session: Session, client: Any, notifier: Any, cfg: E.Config, modes: tuple[str, ...],
-         state: PaperState, now: datetime) -> str:
-    """One minute of the paper engine. Returns a short status for the log."""
+         state: PaperState, now: datetime, send_report: bool = True) -> str:
+    """One minute of the paper engine. Returns a short status for the log.
+
+    send_report=False (the server default since 2026-11-03): no day report of its own, because
+    the signals service sends ONE day report covering these trades too (RK's ask)."""
     ist = now.astimezone(IST)
     today = ist.date()
     if not is_trading_day(today):
@@ -237,7 +240,7 @@ def step(session: Session, client: Any, notifier: Any, cfg: E.Config, modes: tup
     if ist.time() < FIRST_RUN:
         return "waiting for the open"
     if ist.time() >= SUMMARY_AT:
-        if not state.summary_sent:
+        if not state.summary_sent and send_report:
             rows = list(session.scalars(select(PaperTrade).where(
                 PaperTrade.trade_date == today, PaperTrade.timeframe == cfg.timeframe)))
             notifier.send(summary_message(today, cfg.timeframe, rows))

@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.market_time import IST, is_trading_day
-from app.db.models import SignalTrade
+from app.db.models import PaperTrade, SignalTrade
 from app.ema921 import bars as B
 from app.ema921 import engine as E
 from app.ema921 import loader as L
@@ -181,10 +181,15 @@ def exit_message(r: SignalTrade) -> str:
         "Paper trade only. No order was placed."])
 
 
-def summary_message(day: date, rows: list[SignalTrade]) -> str:
+def summary_message(day: date, rows: list[SignalTrade], ema: list | None = None) -> str:
+    """ONE report for every trade of the day: the numbered trades, then the 9/21 EMA paper
+    engine's 3-mode legs (same 5m cross as EMA-921, so its total is shown apart)."""
     lines = [f"{PAPER} · Day report {day:%d %b %Y} · all strategies"]
+    ema_lines = _ema_lines(ema or [])
     if not rows:
-        lines.append("No trades today.")
+        lines.append("No numbered trades today.")
+        lines += ema_lines
+        lines.append("Paper trades only. No order was placed.")
         return "\n".join(lines)
     for r in sorted(rows, key=lambda x: x.id):
         out = (f"{_hm(r.exit_time)} {E.EXIT_LABELS.get(r.exit_reason, r.exit_reason)}"
@@ -201,9 +206,24 @@ def summary_message(day: date, rows: list[SignalTrade]) -> str:
             wins = sum(1 for x in nets if x > 0)
             lines.append(f"{code}: {len(rs)} trades, {wins} winners, net {_rs(sum(nets))}")
     nets = [float(r.net_pnl) for r in rows if r.net_pnl is not None]
-    lines.append(f"Total net today: {_rs(sum(nets))}")
+    lines.append(f"Total net today (numbered trades): {_rs(sum(nets))}")
+    lines += ema_lines
     lines.append("Paper trades only. No order was placed.")
     return "\n".join(lines)
+
+
+def _ema_lines(ema: list) -> list[str]:
+    if not ema:
+        return []
+    out = ["", "9/21 EMA paper engine (same 5m cross, 3 ways; not added to the total above):"]
+    for r in sorted(ema, key=lambda x: (pd.Timestamp(x.entry_time), x.mode)):
+        when = (f"{_hm(r.entry_time)} → {_hm(r.exit_time)}" if r.exit_time is not None
+                else f"{_hm(r.entry_time)} → still OPEN")
+        out.append(f"{E.MODE_LABELS.get(r.mode, r.mode)} · {r.side} {float(r.strike):g} "
+                   f"{r.option_type} · {when} · net {_rs(r.net_pnl)}")
+    nets = [float(r.net_pnl) for r in ema if r.net_pnl is not None]
+    out.append(f"9/21 EMA paper engine net: {_rs(sum(nets))}")
+    return out
 
 
 # ----------------------------------------------------------------------------- the step
@@ -251,8 +271,17 @@ def step(session: Session, client: Any, notifier: Any, strategies: tuple[str, ..
     if ist.time() >= SUMMARY_AT:
         if not state.summary_sent:
             rows = list(session.scalars(select(SignalTrade).where(SignalTrade.trade_date == today)))
-            notifier.send(summary_message(today, rows))
+            ema = list(session.scalars(select(PaperTrade).where(PaperTrade.trade_date == today)))
+            notifier.send(summary_message(today, rows, ema))
             state.summary_sent = True
+            if hasattr(notifier, "send_photo"):  # the same ONE report as a picture
+                try:
+                    from app.live.report_card import render_png
+                    notifier.send_photo(render_png(today, rows, ema),
+                                        f"PAPER day report {today:%d %b %Y}, all strategies. "
+                                        "No order was placed.")
+                except Exception:  # a picture problem must never stop the signal engine
+                    log.exception("day report picture not sent")
             return "day report sent"
         return "closed for the day"
 

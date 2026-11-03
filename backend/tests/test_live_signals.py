@@ -71,7 +71,8 @@ def test_entry_and_exit_messages_quote_the_same_trade_number(session):
     orb = next(r for r in rows if r.strategy == "ORB-1.0")
     assert "09:15-09:29 range" in orb.exit_plan
     report = [m for m in notes.sent if "Day report" in m]
-    assert len(report) == 1 and all(f"#{r.id} " in report[0] for r in rows)
+    assert len(report) == 1 and all(f"#{r.id} {r.strategy}" in report[0] for r in rows)
+    assert len(notes.photos) == 1 and notes.photos[0].startswith(b"\x89PNG")  # ONE picture too
 
 
 def test_open_trades_are_not_closed_early_and_minutes_repeat_safely(session):
@@ -141,3 +142,35 @@ def test_signals_found_after_a_late_start_are_flagged(session):
     session.commit()
     _run_day(session, g2, notes2, step_minutes=1, until=(10, 0))
     assert notes2.sent and not any("LATE" in m for m in notes2.sent)
+
+
+def test_one_day_report_covers_every_strategy_and_the_ema_paper_engine(session):
+    """RK 2026-11-03: one report for every trade taken today, whatever the strategy, with the
+    strategy name next to each trade number (text and picture)."""
+    from app.db.models import PaperTrade
+    from app.live.report_card import render_png
+
+    t0 = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
+    common = dict(trade_date=t0.date(), signal_time=t0, direction=-1, strike=23700,
+                  expiry_date=t0.date(), groww_symbol="x", entry_time=t0, nifty_entry=23678.0,
+                  stale_exit=False, created_at=t0)
+    sig = [SignalTrade(id=1, strategy="ORB-1.0", mode=MODE, side="BUY", option_type="CE", lot_size=65,
+                       entry_price=175.25, entry_fill=176.1, exit_plan="x", exit_time=t0,
+                       exit_price=180, exit_fill=179.1, exit_reason="SQUARE_OFF", gross_pnl=310,
+                       slippage=100, charges=60, net_pnl=150, status="CLOSED",
+                       **{**common, "direction": 1, "strike": 23650}),
+           SignalTrade(id=2, strategy="EMA-921", mode=MODE, side="BUY", option_type="PE", lot_size=65,
+                       entry_price=195.5, entry_fill=196.5, exit_plan="x", status="OPEN", **common)]
+    ema = [PaperTrade(timeframe=5, cross_number=1, mode=m, side=side, option_type=ot, entry_price=1,
+                      entry_fill=1, exit_price=1, exit_fill=1, exit_time=t0, exit_reason="OPPOSITE_CROSS",
+                      gross_pnl=0, slippage=0, charges=0, net_pnl=net, status="CLOSED", **common)
+           for m, side, ot, net in (("ITM_BUY", "BUY", "PE", -1699), ("ATM_BUY", "BUY", "PE", -960),
+                                    ("ATM_SELL", "SELL", "CE", -1334))]
+    msg = LE.summary_message(t0.date(), sig, ema)
+    assert "#1 ORB-1.0" in msg and "#2 EMA-921" in msg and "still OPEN" in msg
+    assert "9/21 EMA paper engine net: -₹3,993" in msg
+    assert "Total net today (numbered trades): ₹150" in msg
+    assert "9/21 EMA paper engine" in LE.summary_message(t0.date(), [], ema)
+    for s_rows, e_rows in ((sig, ema), (sig, []), ([], ema), ([], [])):
+        png = render_png(t0.date(), s_rows, e_rows)
+        assert png.startswith(b"\x89PNG") and len(png) > 1000
