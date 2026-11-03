@@ -126,3 +126,18 @@ def test_strategy_names_and_no_order_code():
     src = inspect.getsource(LE) + inspect.getsource(O) + inspect.getsource(E)
     for word in ("place_order", "modify_order", "cancel_order", "PlaceOrder", "smart_order"):
         assert word not in src
+
+
+def test_signals_found_after_a_late_start_are_flagged(session):
+    _history(session)
+    g, notes = ClockGroww(), Notes()
+    state = LE.LiveState()
+    g.clock = _at(11, 30).astimezone(IST)  # service starts mid-morning
+    LE.step(session, g, notes, tuple(LE.STRATEGIES), MODE, state, _at(11, 30))
+    orb = [m for m in notes.sent if "ORB-1.0" in m and "ENTRY" in m]
+    assert orb and orb[0].startswith("⚠ LATE") and "do not chase it" in orb[0]
+    g2, notes2 = ClockGroww(), Notes()
+    session.query(SignalTrade).delete()
+    session.commit()
+    _run_day(session, g2, notes2, step_minutes=1, until=(10, 0))
+    assert notes2.sent and not any("LATE" in m for m in notes2.sent)

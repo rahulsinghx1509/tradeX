@@ -125,6 +125,16 @@ def _rs(x) -> str:
     return "–" if x is None else (f"-₹{abs(float(x)):,.0f}" if float(x) < 0 else f"₹{float(x):,.0f}")
 
 
+LATE_MINUTES = 5  # an entry first seen this long after its fill was missed live (e.g. a restart)
+
+
+def _late(entry_time, seen_at) -> bool:
+    def utc(t):
+        ts = pd.Timestamp(t)
+        return ts.tz_localize("UTC") if ts.tzinfo is None else ts
+    return utc(seen_at) - utc(entry_time) > timedelta(minutes=LATE_MINUTES)
+
+
 def _contract(r: SignalTrade) -> str:
     return f"NIFTY {float(r.strike):g} {r.option_type} · expiry {r.expiry_date:%d %b %Y}"
 
@@ -135,7 +145,12 @@ def entry_message(r: SignalTrade) -> str:
     value = float(r.entry_price) * r.lot_size
     money = (f"Premium ≈ {_rs(value)} for 1 lot" if r.side == "BUY"
              else f"Premium received ≈ {_rs(value)}; selling needs margin (about ₹1L+ a lot)")
-    return "\n".join([
+    late = []
+    if r.created_at is not None and _late(r.entry_time, r.created_at):
+        late = [f"⚠ LATE: this signal fired at {_hm(r.entry_time)} but is only being sent at "
+                f"{_hm(r.created_at)} (the service was not running then). The price now is "
+                "different: do not chase it."]
+    return "\n".join(late + [
         f"{PAPER} · Trade #{r.id} · ENTRY · {r.strategy} ({s.name if s else r.strategy})",
         f"{_hm(r.entry_time)} IST · {arrow} NIFTY at {float(r.nifty_entry or 0):,.2f}",
         f"Action: {r.side} {_contract(r)}",
