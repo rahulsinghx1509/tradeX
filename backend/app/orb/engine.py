@@ -65,9 +65,17 @@ def breakout(day_bars: pd.DataFrame, rng: Range) -> B.Cross | None:
     return None
 
 
-def signals(spot: pd.DataFrame) -> dict[date, tuple[Range, B.Cross]]:
-    """{day: (range, breakout)} for every day that has one."""
+def closed_bars(spot: pd.DataFrame, as_of: pd.Timestamp | None = None) -> pd.DataFrame:
+    """5-minute bars; live (`as_of`), only those that have closed by then."""
     bars = B.resample(spot, TIMEFRAME)
+    if as_of is not None:
+        bars = bars[bars["bar_close"] <= as_of].reset_index(drop=True)
+    return bars
+
+
+def signals(spot: pd.DataFrame, as_of: pd.Timestamp | None = None) -> dict[date, tuple[Range, B.Cross]]:
+    """{day: (range, breakout)} for every day that has one (live: from closed bars only)."""
+    bars = closed_bars(spot, as_of)
     ranges = opening_ranges(spot)
     out = {}
     for d, g in bars.groupby("day", sort=True):
@@ -95,13 +103,16 @@ def _range_stop(day_bars: pd.DataFrame, entry: B.Cross, rng: Range, before: pd.T
 
 def run(spot: pd.DataFrame, options: E.OptionData, start: date, end: date,
         cfg: E.Config | None = None, modes: tuple[str, ...] = E.MODES,
-        holidays: frozenset[date] | None = None) -> E.Result:
+        holidays: frozenset[date] | None = None, as_of: pd.Timestamp | None = None) -> E.Result:
+    """Backtest [start, end]. `as_of` is for the live paper engine, as in the EMA engine: only
+    bars closed by then count, a fill whose candle may still arrive is left pending, and a trade
+    still running comes back with exit_time None."""
     cfg = config(cfg)
-    bars = B.resample(spot, TIMEFRAME)
+    bars = closed_bars(spot, as_of)
     bar_index = {t: i for i, t in enumerate(bars["bar_close"])}
     bars_by_day = {d: g.reset_index(drop=True) for d, g in bars.groupby("day", sort=True)}
-    sigs = signals(spot)
-    days, why = E.no_trade_days(spot, start, end, cfg, holidays)
+    sigs = signals(spot, as_of)
+    days, why = E.no_trade_days(spot, start, end, cfg, holidays, as_of)
     expiries = options.expiries()
     trades: dict[str, list[E.Trade]] = {m: [] for m in modes}
     skips: list[E.Skip] = []
@@ -122,14 +133,15 @@ def run(spot: pd.DataFrame, options: E.OptionData, start: date, end: date,
         square = E._ist(d, cfg.square_off)
         made = 0
         for mode in modes:
-            tr = E._open(mode, d, entry, options, expiries, cfg, minutes, skips)
+            tr = E._open(mode, d, entry, options, expiries, cfg, minutes, skips, as_of)
             if tr is None:
                 continue
             hit = _range_stop(bars_by_day[d], entry, rng, square)
             if hit is not None:
-                E._close(tr, hit.bar_close, "RANGE_STOP", float(hit.close), cfg, minutes, bar_index)
-            else:
-                E._close(tr, square, "SQUARE_OFF", spot_px.at(square), cfg, minutes, bar_index)
+                E._close(tr, hit.bar_close, "RANGE_STOP", float(hit.close), cfg, minutes, bar_index,
+                         as_of)
+            elif as_of is None or as_of >= square:
+                E._close(tr, square, "SQUARE_OFF", spot_px.at(square), cfg, minutes, bar_index, as_of)
             trades[mode].append(tr)
             made += 1
         if not made:

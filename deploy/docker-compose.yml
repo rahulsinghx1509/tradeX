@@ -66,6 +66,14 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
 
+  # Multi-strategy PAPER signals (EMA-921, ORB-1.0, ET-1.0), numbered trades on Telegram.
+  # Never places orders. Switch off: SIGNALS_OFF=1 in .env, then deploy/tradex.sh restart signals
+  signals:
+    <<: *app
+    command: ["sh", "-c", "python scripts/signals_paper.py --strategies $${SIGNALS_STRATEGIES:-all} --mode $${SIGNALS_MODE:-ATM_BUY}"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
   dashboard:
     build:
       context: ..
