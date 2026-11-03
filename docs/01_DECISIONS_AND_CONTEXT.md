@@ -500,3 +500,22 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   GAP-LONG 67 trades net -₹3.9k (0.87); GAP-SHORT 44 trades net +₹191 (PF 1.01).
   Same pattern as the option strategies: any edge before costs (best ORB-LONG ≈ ₹73/trade) is
   smaller than costs (≈ ₹175/trade). The live stock scanner was not built.
+
+## 25. VF-1.0: NIFTY futures volume, live and as a tested filter (2026-11-03)
+
+- RK: "can we add volume in our analysis live", then chose **both**: show volume in the live
+  alerts as information, and backtest a volume entry filter before anything changes live.
+- The NIFTY index has no volume, so NIFTY **near-month futures** 1-minute volume is used (one
+  continuous series, `NSE-NIFTY-FUT-NEAR` in minute_candles; near month = earliest monthly
+  futures expiry on or after the day). Rules in `backend/app/volume/__init__.py`, fixed before
+  any result: RVOL = 5-minute bar volume / the same time-of-day bar's average over the previous
+  20 days (intraday volume is U-shaped, so same-slot comparison); missing volume = no RVOL.
+- Live (PAPER, `signals` service): every entry alert adds a line such as "Volume (NIFTY fut,
+  10:25 bar): 1.42x its 20-day average for that time". Information only: no trade is filtered.
+- Test: EMA-921, ORB-1.0, ET-1.0 x 3 modes, entries only when the signal bar's RVOL >= 1.0 or
+  >= 1.5 (18 filtered rows, plus the 9 unfiltered for comparison). Same pass bar as §22 on the
+  2 development years; filtered rows are not judged if under 80% of bars have volume. Best
+  passing row only: one held-back-year run (`volume-backtest --holdout ROW`, refused twice).
+- Commands: `fut-load` (Groww 1-minute futures, last 3 years; whether expired futures are
+  served at 1 minute is NOT_VERIFIED), then `volume-backtest` (reports/volume_backtest.md).
+- The live filter is switched on only if a row passes and RK approves. Result: pending.

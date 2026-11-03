@@ -60,6 +60,9 @@ Read these before doing any work:
   `signals` service, table `signal_trades`; docs/01 §23). Real alerts only after a strategy passes and RK approves.
 - 🔀 2026-11-03 RK: intraday STOCKS (NIFTY 50 + Next 50), docs/01 §24: `stock-load` then `stock-backtest`
   (IS-1.0: ORB / VWAP pullback / gap-and-go, long + short). Result 2026-11-03: all 6 rows FAIL; no scanner built.
+- 🔀 2026-11-03 RK: volume in the live analysis (docs/01 §25, VF-1.0): NIFTY near-month futures 1-min volume
+  (`tradex.sh fut-load`), RVOL line in every PAPER entry alert (info only), `volume-backtest` of a volume
+  entry filter on EMA-921/ORB/ET. Result pending; filter goes live only if it passes and RK approves.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
@@ -80,5 +83,6 @@ Read these before doing any work:
 - `scripts/` – backfill, collector, Telegram helpers, Groww capability check.
 - `deploy/` – server Docker Compose (db, migrate, api, collector, dashboard, caddy), `tradex.sh` everyday commands,
   setup, nightly backup and 5-minute auto-update from `main`. Merging to `main` deploys to the server.
+- `backend/app/volume/` – VF-1.0: near-month futures 1m loader (`futures.py`), RVOL + entry filter (`rvol.py`); engines take `entry_filter`.
 - `backend/app/stocks/` – intraday stocks (NIFTY 50 + Next 50): 5-minute loader (`tradex.sh stock-load`), IS-1.0 rules (`rules.py`), engine, `stock-backtest`.
 - Tests: `cd backend && python -m pytest` (SQLite); set `TEST_DATABASE_URL` to run on PostgreSQL.

@@ -5,7 +5,8 @@ Every minute during market hours:
 2. NO TRADE if the newest candle is more than STALE_MINUTES old;
 3. run each strategy's own engine on today with as_of = now (same rules as its backtest);
 4. a new trade gets the next trade number and an ENTRY message with everything needed to act
-   on it; a newly filled exit sends an EXIT message quoting the same trade number;
+   on it (plus the signal bar's NIFTY futures volume vs its usual level, VF-1.0, info only); a
+   newly filled exit sends an EXIT message quoting the same trade number;
 5. after 15:05, one day report listing every trade by number.
 """
 
@@ -30,6 +31,8 @@ from app.ema921 import store as S
 from app.ema921 import trend as T
 from app.ema921.paper import LiveOptions, closed_only
 from app.orb import engine as O
+from app.volume import futures as VF
+from app.volume import rvol as RV
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +114,7 @@ class LiveState:
     stale_alerted: bool = False
     summary_sent: bool = False
     skips_alerted: set = field(default_factory=set)
+    futures: Any = None  # VF.LiveFutures (volume for the alerts)
 
 
 # ----------------------------------------------------------------------------- messages
@@ -139,7 +143,7 @@ def _contract(r: SignalTrade) -> str:
     return f"NIFTY {float(r.strike):g} {r.option_type} · expiry {r.expiry_date:%d %b %Y}"
 
 
-def entry_message(r: SignalTrade) -> str:
+def entry_message(r: SignalTrade, volume: str | None = None) -> str:
     s = STRATEGIES.get(r.strategy)
     arrow = "▲ LONG" if r.direction > 0 else "▼ SHORT"
     value = float(r.entry_price) * r.lot_size
@@ -157,6 +161,7 @@ def entry_message(r: SignalTrade) -> str:
         f"Quantity: 1 lot = {r.lot_size}",
         f"Price: ₹{float(r.entry_price):g} (1-min open); with slippage ≈ ₹{float(r.entry_fill):g}",
         money,
+        *([volume] if volume else []),
         r.exit_plan,
         f"I'll send 'Trade #{r.id} EXIT' when it closes.",
         "Paper trade only. No order was placed."])
@@ -318,6 +323,7 @@ def step(session: Session, client: Any, notifier: Any, strategies: tuple[str, ..
     if state.options is None:
         state.options = LiveOptions(session, client, today)
     state.options.as_of = as_of
+    _futures_minute(session, client, state, today, as_of)
     spot = S.load_spot(session, today, today, L.WARMUP_CALENDAR_DAYS)
     lot = S.UNDERLYINGS[S.UNDERLYING][0]
     entries, exits, open_now = [], [], 0
@@ -342,11 +348,33 @@ def step(session: Session, client: Any, notifier: Any, strategies: tuple[str, ..
                 notifier.send(f"{PAPER} · {code}: entry at {_hm(s.signal_time)} skipped "
                               f"({s.reason} {s.detail}). NO TRADE.")
     session.commit()
+    lookup = _volume_lookup(session, today) if entries else None
     for r in sorted(entries, key=lambda x: x.id):
-        notifier.send(entry_message(r))
+        notifier.send(entry_message(r, RV.note(lookup, r.signal_time)))
     for r in sorted(exits, key=lambda x: (x.exit_time, x.id)):
         notifier.send(exit_message(r))
     return f"ok at {as_of:%H:%M}: {len(entries)} entries, {len(exits)} exits, {open_now} open"
+
+
+def _futures_minute(session: Session, client: Any, state: LiveState, today: date,
+                    as_of: pd.Timestamp) -> None:
+    """Store today's NIFTY futures 1m candles (for volume). Never stops the signal engine."""
+    try:
+        if state.futures is None:
+            state.futures = VF.LiveFutures(session, client, today)
+            state.futures.warm_up(log=log.info)
+        state.futures.fetch_today(lambda c: closed_only(c, as_of))
+    except Exception as exc:
+        session.rollback()
+        log.warning("futures volume not updated: %s", exc)
+
+
+def _volume_lookup(session: Session, today: date) -> RV.RvolLookup | None:
+    try:
+        return RV.RvolLookup(RV.load_volume(session, VF.history_start(today), today))
+    except Exception:
+        log.exception("volume lookup failed")
+        return None
 
 
 def parse_strategies(text: str) -> tuple[str, ...]:

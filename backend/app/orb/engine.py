@@ -6,6 +6,7 @@ slippage, costs and the Trade/Result records, so the two strategies are scored t
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import date, time
 
@@ -103,10 +104,14 @@ def _range_stop(day_bars: pd.DataFrame, entry: B.Cross, rng: Range, before: pd.T
 
 def run(spot: pd.DataFrame, options: E.OptionData, start: date, end: date,
         cfg: E.Config | None = None, modes: tuple[str, ...] = E.MODES,
-        holidays: frozenset[date] | None = None, as_of: pd.Timestamp | None = None) -> E.Result:
+        holidays: frozenset[date] | None = None, as_of: pd.Timestamp | None = None,
+        entry_filter: Callable[[B.Cross], bool] | None = None) -> E.Result:
     """Backtest [start, end]. `as_of` is for the live paper engine, as in the EMA engine: only
     bars closed by then count, a fill whose candle may still arrive is left pending, and a trade
-    still running comes back with exit_time None."""
+    still running comes back with exit_time None.
+
+    `entry_filter` (e.g. the VF-1.0 volume filter, app/volume): if it returns False for the day's
+    breakout, that day has no trade (later breaks are not taken: ORB trades the first one only)."""
     cfg = config(cfg)
     bars = closed_bars(spot, as_of)
     bar_index = {t: i for i, t in enumerate(bars["bar_close"])}
@@ -130,6 +135,9 @@ def run(spot: pd.DataFrame, options: E.OptionData, start: date, end: date,
             why[d] = "NO_BREAK"
             continue
         rng, entry = sigs[d]
+        if entry_filter is not None and not entry_filter(entry):
+            why[d] = "ENTRY_FILTER"
+            continue
         square = E._ist(d, cfg.square_off)
         made = 0
         for mode in modes:
