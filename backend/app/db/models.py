@@ -377,3 +377,52 @@ class SignalTrade(Base):
     status: Mapped[str] = mapped_column(String(6))  # OPEN / CLOSED
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class StockMember(Base):
+    """The intraday stock universe: current NIFTY 50 and NIFTY Next 50 members (NSE's own lists,
+    downloaded by `tradex.sh stock-load`). Today's members only, so older history has
+    survivorship bias (stocks that left the index are missing)."""
+
+    __tablename__ = "stock_members"
+    __table_args__ = (UniqueConstraint("symbol", name="uq_stock_member"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32))  # NSE trading symbol, e.g. RELIANCE
+    index_name: Mapped[str] = mapped_column(String(20))  # NIFTY 50 / NIFTY Next 50
+    groww_symbol: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class StockCandle(Base):
+    """5-minute candles for intraday stock work (and NIFTY itself, symbol "NIFTY")."""
+
+    __tablename__ = "stock_candles"
+    __table_args__ = (UniqueConstraint("symbol", "candle_time", name="uq_stock_candle"),
+                      Index("ix_stock_candles_symbol_date", "symbol", "trade_date"))
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    trade_date: Mapped[date] = mapped_column(Date)  # IST trading day
+    candle_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # candle START, UTC
+    open: Mapped[float | None] = mapped_column(Price)
+    high: Mapped[float | None] = mapped_column(Price)
+    low: Mapped[float | None] = mapped_column(Price)
+    close: Mapped[float | None] = mapped_column(Price)
+    volume: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class StockFetch(Base):
+    """One row per (symbol, 30-day window) asked from Groww, so `stock-load` resumes."""
+
+    __tablename__ = "stock_fetches"
+    __table_args__ = (UniqueConstraint("symbol", "window_start", name="uq_stock_fetch"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    window_start: Mapped[date] = mapped_column(Date)
+    window_end: Mapped[date] = mapped_column(Date)
+    rows: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(10))  # OK / EMPTY / PARTIAL / ERROR
+    error: Mapped[str | None] = mapped_column(String(300))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

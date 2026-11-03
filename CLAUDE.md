@@ -55,9 +55,11 @@ Read these before doing any work:
   `backend/app/straddle/`. Result: FAIL (net −₹1.86L over 2 years, PF 0.65); no held-back test.
 - 🔀 2026-11-02 RK: backtest ORB-1.0 (opening-range breakout) and ET-1.0 (9/21 EMA + 15m trend
   filter) on NIFTY and BANKNIFTY options, pass bar fixed first (docs/01 §22). `backend/app/orb/`,
-  `ema921/trend.py`, `tradex.sh orb-load` / `orb-et-backtest`. Result pending RK's server run.
+  `ema921/trend.py`, `tradex.sh orb-load` / `orb-et-backtest`. Result 2026-11-03: all 12 rows FAIL (best NIFTY ET ATM sell, PF 1.05). Auto-trading on hold.
 - 🔀 2026-11-03 RK: EMA-921, ORB-1.0 and ET-1.0 run live as numbered PAPER signals (`backend/app/live/`,
   `signals` service, table `signal_trades`; docs/01 §23). Real alerts only after a strategy passes and RK approves.
+- 🔀 2026-11-03 RK: intraday STOCKS (NIFTY 50 + Next 50), docs/01 §24: `stock-load` then `stock-backtest`
+  (IS-1.0: ORB / VWAP pullback / gap-and-go, long + short). Live PAPER scanner only after a setup passes.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
@@ -78,4 +80,5 @@ Read these before doing any work:
 - `scripts/` – backfill, collector, Telegram helpers, Groww capability check.
 - `deploy/` – server Docker Compose (db, migrate, api, collector, dashboard, caddy), `tradex.sh` everyday commands,
   setup, nightly backup and 5-minute auto-update from `main`. Merging to `main` deploys to the server.
+- `backend/app/stocks/` – intraday stocks (NIFTY 50 + Next 50): 5-minute loader (`tradex.sh stock-load`), IS-1.0 rules (`rules.py`), engine, `stock-backtest`.
 - Tests: `cd backend && python -m pytest` (SQLite); set `TEST_DATABASE_URL` to run on PostgreSQL.

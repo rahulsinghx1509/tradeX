@@ -435,6 +435,14 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   `orb-load --underlying BANKNIFTY` (ORB legs), then `orb-et-backtest`
   (reports/orb_et_backtest.md, orb_et_trades.csv). Backtest only; nothing here is wired into the
   paper engine or places orders.
+- Result (RK's server run, 2026-11-03; Nov 2024 - Oct 2026, default slippage, 4,110 trades):
+  **all 12 rows FAIL**, so no held-back-year run and no re-tune.
+  - NIFTY ORB: net -₹1.69L to -₹3.13L, PF 0.75-0.78, max DD 174-309%.
+  - NIFTY ET: gross positive in all modes (+₹30k to +₹66k) but net: ATM sell +₹8.6k (PF 1.05;
+    year 1 +₹23.8k, year 2 -₹15.2k), ATM buy -₹19.6k (0.91), Deep ITM buy -₹11.1k (0.96).
+  - BANKNIFTY ORB: net -₹2.17L to -₹4.33L, PF 0.64-0.75. BANKNIFTY ET: net -₹0.89L to -₹1.47L,
+    PF 0.52-0.61. Both lose even before costs.
+  - 2026-11-03 RK: auto algo trading plan put ON HOLD (no strategy has passed).
 
 ## 23. Three strategies live as numbered PAPER signals (2026-11-03)
 
@@ -454,3 +462,26 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   15:05 day report by trade number. Stale NIFTY data (> 3 min) = NO TRADE.
 - The older `ema-paper` service (all three modes of 9/21 EMA) keeps running; switch it off with
   EMA921_PAPER_OFF=1 if the EMA-921 messages feel doubled.
+
+## 24. Intraday stocks: NIFTY 50 + NIFTY Next 50 (2026-11-03)
+
+- After every NIFTY/BANKNIFTY option strategy failed (§20-§22), RK chose intraday **stocks**:
+  all NIFTY 50 + NIFTY Next 50 members. Backtest setups first, then a live server scan every
+  5 minutes with numbered PAPER Telegram alerts (entry, quantity, stop-loss, target, exit).
+  PAPER until a setup passes and RK approves. Never orders. Claude does not watch charts
+  live: the server's fixed rules do.
+- Data: `tradex.sh stock-load` downloads NSE's two member lists (table `stock_members`), then
+  5-minute candles per stock and NIFTY from Groww (`stock_candles`, fetch log `stock_fetches`)
+  in 30-day windows, newest first, up to 3 years. Groww's depth for 5-minute stock candles is
+  NOT_VERIFIED until it runs. Today's members only, so older history has survivorship bias.
+- Setups, sizing, costs and pass bar: IS-1.0, `backend/app/stocks/rules.py` (fixed before any
+  result).
+  Three setups x LONG/SHORT = 6 rows: ORB (09:15-09:29 range breakout + VWAP side + RVOL >= 1.5),
+  VWP (VWAP trend pullback, day change >= 1%, RS vs NIFTY >= 0.5%), GAP (1-4% gap, RVOL >= 2,
+  break of the 09:15 bar). Market filter (NIFTY vs its open) and relative strength on all.
+  Stop 0.25-1.5% of price, target 2R, square-off 15:15, risk ₹1,000/trade, at most 2 open.
+  Slippage 0.05% a side + full equity intraday charges.
+- Pass bar: >= 100 trades, net > 0, PF >= 1.10, both halves of the development period > 0,
+  max DD < 25% of ₹1L. The oldest third of loaded days is held back; only the best passing row
+  gets one run on it (`stock-backtest --holdout ROW`, refused a second time): net > 0, PF >= 1.05.
+- Commands: `stock-load`, then `stock-backtest` (reports/stock_backtest.md, stock_trades.csv).
