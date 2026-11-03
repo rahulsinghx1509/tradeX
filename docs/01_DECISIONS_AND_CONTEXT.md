@@ -463,6 +463,12 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - The older `ema-paper` service (all three modes of 9/21 EMA) keeps running; switch it off with
   EMA921_PAPER_OFF=1 if the EMA-921 messages feel doubled.
 
+- 2026-11-03 RK: ONE day report for every trade of the day, whatever the strategy, and the
+  picture shows the strategy next to each trade number ("Trade #12 · ORB-1.0"). The signals
+  service sends it at 15:05 as text + picture (`app/live/report_card.py`); it also lists the 9/21
+  EMA paper engine's 3-mode legs (same cross as EMA-921, so their total is shown apart, not added).
+  The ema-paper service no longer sends its own report (`--own-report` turns it back on).
+
 ## 24. Intraday stocks: NIFTY 50 + NIFTY Next 50 (2026-11-03)
 
 - After every NIFTY/BANKNIFTY option strategy failed (§20-§22), RK chose intraday **stocks**:
@@ -485,3 +491,10 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   max DD < 25% of ₹1L. The oldest third of loaded days is held back; only the best passing row
   gets one run on it (`stock-backtest --holdout ROW`, refused a second time): net > 0, PF >= 1.05.
 - Commands: `stock-load`, then `stock-backtest` (reports/stock_backtest.md, stock_trades.csv).
+- Result (RK's server run 2026-11-03; 100 stocks, 5-minute data from 2023-11-03, development
+  = newest two thirds): **all 6 rows FAIL**, so no held-back run and no re-tune.
+  ORB-LONG 429 trades, gross +₹31.5k, costs ₹74.3k, net -₹42.7k (PF 0.76); ORB-SHORT net -₹67.7k
+  (0.64); VWP-LONG 1,023 trades gross +₹1.9k, net -₹3.13L (0.58); VWP-SHORT net -₹3.08L (0.60);
+  GAP-LONG 67 trades net -₹3.9k (0.87); GAP-SHORT 44 trades net +₹191 (PF 1.01).
+  Same pattern as the option strategies: any edge before costs (best ORB-LONG ≈ ₹73/trade) is
+  smaller than costs (≈ ₹175/trade). The live stock scanner was not built.

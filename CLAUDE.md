@@ -59,7 +59,7 @@ Read these before doing any work:
 - 🔀 2026-11-03 RK: EMA-921, ORB-1.0 and ET-1.0 run live as numbered PAPER signals (`backend/app/live/`,
   `signals` service, table `signal_trades`; docs/01 §23). Real alerts only after a strategy passes and RK approves.
 - 🔀 2026-11-03 RK: intraday STOCKS (NIFTY 50 + Next 50), docs/01 §24: `stock-load` then `stock-backtest`
-  (IS-1.0: ORB / VWAP pullback / gap-and-go, long + short). Live PAPER scanner only after a setup passes.
+  (IS-1.0: ORB / VWAP pullback / gap-and-go, long + short). Result 2026-11-03: all 6 rows FAIL; no scanner built.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 

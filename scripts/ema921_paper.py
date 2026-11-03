@@ -65,6 +65,9 @@ def main() -> int:
     p.add_argument("--stop-atr", type=float, default=2.0,
                    help="trailing stop distance in ATR(14) of the signal bars; 0 turns it off")
     p.add_argument("--once", action="store_true")
+    p.add_argument("--own-report", action="store_true",
+                   help="also send this engine's own 15:05 day report (off: the signals service "
+                        "sends ONE day report covering these trades too)")
     a = p.parse_args()
     modes = E.MODES if a.modes.strip().lower() == "all" else tuple(
         m.strip().upper() for m in a.modes.split(",") if m.strip())
@@ -94,7 +97,8 @@ def main() -> int:
         try:
             client = provider.client()
             with Session() as session:
-                log.info(P.step(session, client, notifier, cfg, modes, state, P.utc_now()))
+                log.info(P.step(session, client, notifier, cfg, modes, state, P.utc_now(),
+                                send_report=a.own_report))
         except ProviderError as exc:
             log.error("Groww unavailable: %s", exc)
         except Exception:
