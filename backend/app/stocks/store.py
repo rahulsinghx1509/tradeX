@@ -65,7 +65,7 @@ def save_candles(session: Session, symbol: str, candles: list[Candle]) -> int:
         open_, close = session_bounds(day)
         if open_ <= c.time < close:
             by_time[c.time] = c
-    rows = [dict(symbol=symbol, trade_date=to_ist(c.time).date(), candle_time=c.time,
+    rows = [dict(symbol=symbol, trade_date=to_ist(c.time).date(), candle_time=c.time.astimezone(UTC),
                  open=c.open, high=c.high, low=c.low, close=c.close, volume=c.volume)
             for c in by_time.values()]
     for i in range(0, len(rows), CHUNK):

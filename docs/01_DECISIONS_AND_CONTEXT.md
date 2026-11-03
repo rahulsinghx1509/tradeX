@@ -474,5 +474,14 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   5-minute candles per stock and NIFTY from Groww (`stock_candles`, fetch log `stock_fetches`)
   in 30-day windows, newest first, up to 3 years. Groww's depth for 5-minute stock candles is
   NOT_VERIFIED until it runs. Today's members only, so older history has survivorship bias.
-- Setups, sizing, costs and pass bar: IS-1.0, `backend/app/stocks/rules.py` (next PR; fixed before any
+- Setups, sizing, costs and pass bar: IS-1.0, `backend/app/stocks/rules.py` (fixed before any
   result).
+  Three setups x LONG/SHORT = 6 rows: ORB (09:15-09:29 range breakout + VWAP side + RVOL >= 1.5),
+  VWP (VWAP trend pullback, day change >= 1%, RS vs NIFTY >= 0.5%), GAP (1-4% gap, RVOL >= 2,
+  break of the 09:15 bar). Market filter (NIFTY vs its open) and relative strength on all.
+  Stop 0.25-1.5% of price, target 2R, square-off 15:15, risk ₹1,000/trade, at most 2 open.
+  Slippage 0.05% a side + full equity intraday charges.
+- Pass bar: >= 100 trades, net > 0, PF >= 1.10, both halves of the development period > 0,
+  max DD < 25% of ₹1L. The oldest third of loaded days is held back; only the best passing row
+  gets one run on it (`stock-backtest --holdout ROW`, refused a second time): net > 0, PF >= 1.05.
+- Commands: `stock-load`, then `stock-backtest` (reports/stock_backtest.md, stock_trades.csv).
