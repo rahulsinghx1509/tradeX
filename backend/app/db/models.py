@@ -335,3 +335,45 @@ class PaperTrade(Base):
     status: Mapped[str] = mapped_column(String(6))  # OPEN / CLOSED
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SignalTrade(Base):
+    """A PAPER trade from the multi-strategy signal engine (app/live). Never a real order.
+
+    `id` is the trade number shown in every Telegram message ("Trade #12"), counted across all
+    strategies and days. One row per (strategy, day, entry signal)."""
+
+    __tablename__ = "signal_trades"
+    __table_args__ = (UniqueConstraint("strategy", "trade_date", "signal_time",
+                                       name="uq_signal_trade"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    strategy: Mapped[str] = mapped_column(String(16))  # EMA-921 / ORB-1.0 / ET-1.0
+    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    mode: Mapped[str] = mapped_column(String(10))  # ITM_BUY / ATM_BUY / ATM_SELL
+    signal_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    direction: Mapped[int] = mapped_column(Integer)  # +1 long NIFTY, -1 short
+    side: Mapped[str] = mapped_column(String(4))
+    option_type: Mapped[str] = mapped_column(String(2))
+    strike: Mapped[float] = mapped_column(Price)
+    expiry_date: Mapped[date] = mapped_column(Date)
+    groww_symbol: Mapped[str] = mapped_column(String(64))
+    lot_size: Mapped[int] = mapped_column(Integer)
+    entry_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    entry_price: Mapped[float] = mapped_column(Price)
+    entry_fill: Mapped[float] = mapped_column(Price)
+    nifty_entry: Mapped[float | None] = mapped_column(Price)
+    exit_plan: Mapped[str] = mapped_column(String(300))
+    exit_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    exit_price: Mapped[float | None] = mapped_column(Price)
+    exit_fill: Mapped[float | None] = mapped_column(Price)
+    exit_reason: Mapped[str | None] = mapped_column(String(20))
+    nifty_exit: Mapped[float | None] = mapped_column(Price)
+    stale_exit: Mapped[bool] = mapped_column(Boolean, default=False)
+    gross_pnl: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    slippage: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    charges: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    net_pnl: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    status: Mapped[str] = mapped_column(String(6))  # OPEN / CLOSED
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

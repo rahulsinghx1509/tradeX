@@ -435,3 +435,22 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   `orb-load --underlying BANKNIFTY` (ORB legs), then `orb-et-backtest`
   (reports/orb_et_backtest.md, orb_et_trades.csv). Backtest only; nothing here is wired into the
   paper engine or places orders.
+
+## 23. Three strategies live as numbered PAPER signals (2026-11-03)
+
+- **RK, 2026-11-03:** run several strategies live on the server, not one, with Telegram alerts
+  giving a trade number, the strategy name and everything needed to execute, and later an exit
+  message by the same trade number.
+- Only four strategies exist and none has passed a backtest (9/21 EMA and ST-1.0 failed; ORB-1.0
+  and ET-1.0 are waiting for RK's server run), so the three are EMA-921, ORB-1.0 and ET-1.0.
+- **RK chose (decision card): PAPER now, real after pass.** Messages stay marked PAPER. A strategy
+  switches to real alerts only after it passes its backtest and RK approves. Never orders.
+- Built: `backend/app/live/` + `signals` compose service (`scripts/signals_paper.py`). Each
+  strategy re-runs its own backtest engine every minute (`as_of`), NIFTY weekly options, one mode
+  for all (ATM buy, 1 lot of 65; `SIGNALS_MODE` in .env). Table `signal_trades`; its id is the
+  trade number, counted across strategies and days. Entry message: trade #, strategy, contract,
+  quantity, 1-minute open price and price after slippage, premium, exit plan (ORB: the range
+  level; EMA-921: starting trailing-stop level). Exit message: same #, reason, prices, P&L.
+  15:05 day report by trade number. Stale NIFTY data (> 3 min) = NO TRADE.
+- The older `ema-paper` service (all three modes of 9/21 EMA) keeps running; switch it off with
+  EMA921_PAPER_OFF=1 if the EMA-921 messages feel doubled.

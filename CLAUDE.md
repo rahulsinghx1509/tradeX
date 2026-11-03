@@ -56,6 +56,8 @@ Read these before doing any work:
 - 🔀 2026-11-02 RK: backtest ORB-1.0 (opening-range breakout) and ET-1.0 (9/21 EMA + 15m trend
   filter) on NIFTY and BANKNIFTY options, pass bar fixed first (docs/01 §22). `backend/app/orb/`,
   `ema921/trend.py`, `tradex.sh orb-load` / `orb-et-backtest`. Result pending RK's server run.
+- 🔀 2026-11-03 RK: EMA-921, ORB-1.0 and ET-1.0 run live as numbered PAPER signals (`backend/app/live/`,
+  `signals` service, table `signal_trades`; docs/01 §23). Real alerts only after a strategy passes and RK approves.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
@@ -67,6 +69,7 @@ Read these before doing any work:
 - `backend/app/api/routes/` – read-only GET endpoints only. A test fails if a non-GET route appears.
 - `backend/alembic/versions/` – schema migrations. Change models → `alembic revision --autogenerate`.
 - `backend/app/straddle/` – ST-1.0 09:20 hedged short straddle: rules in `__init__.py`, engine, loader (reuses ema921 tables), report.
+- `backend/app/live/` – multi-strategy PAPER signal engine: numbered entry/exit Telegram messages (`signals` service).
 - `backend/app/orb/` – ORB-1.0 opening-range breakout (rules in `__init__.py`), reuses the ema921 engine's fills/costs.
 - `backend/app/ema921/` – 9/21 EMA options backtest (`trend.py` = ET-1.0 filter; `store.UNDERLYINGS` = NIFTY/BANKNIFTY lot and strike step): bars/crosses, costs, engine, metrics, 1m store, Groww loader, probe,
   `web.py` + `static/` Flask trade viewer (GET only; `ema` compose service behind Caddy at `/ema/`).
