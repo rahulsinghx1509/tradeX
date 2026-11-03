@@ -57,11 +57,14 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
 
-  # 9/21 EMA PAPER engine: PAPER Telegram messages during market hours. Never places orders.
-  # Change its settings in .env (EMA921_PAPER_TF / _START / _CUTOFF / _MODES), then
-  # deploy/tradex.sh restart ema-paper. To switch it off: deploy/tradex.sh stop-paper
+  # 9/21 EMA PAPER engine (3 modes per signal). OFF by default since 2026-11-03 (RK: one alert
+  # per signal, not 3-4): the signals service already alerts EMA-921 as a numbered trade.
+  # To switch it back on: EMA921_PAPER_OFF=0 in .env, then deploy/tradex.sh restart ema-paper.
   ema-paper:
     <<: *app
+    environment:
+      DATABASE_URL: postgresql://tradex:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/tradex
+      EMA921_PAPER_OFF: ${EMA921_PAPER_OFF:-1}
     command: ["sh", "-c", "python scripts/ema921_paper.py --tf $${EMA921_PAPER_TF:-5} --start $${EMA921_PAPER_START:-09:30} --cutoff $${EMA921_PAPER_CUTOFF:-14:30} --modes $${EMA921_PAPER_MODES:-all}"]
     depends_on:
       migrate: { condition: service_completed_successfully }

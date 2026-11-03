@@ -2,8 +2,7 @@
 
 - Numbered trades from the signals service (signal_trades): "Trade #12 · ORB-1.0", one row each.
 - The 9/21 EMA paper engine's trades (paper_trades, the same 5-minute cross in 3 modes) in their
-  own card, so nothing taken today is left out. Its total is shown apart: it is the same signal
-  as EMA-921 traded three ways, so adding it to the numbered total would count it twice.
+  own card. The headline total adds up EVERY alerted trade, these legs included (RK 2026-11-03).
 
 Numbers come straight from the database rows; nothing is recomputed. Missing shows as "–".
 """
@@ -70,31 +69,35 @@ def _layout(c: _Canvas, day: date, signals: list, ema: list) -> int:
     c.y += 70
 
     signals = sorted(signals, key=lambda r: r.id)
-    nets = [n for n in (_net(r) for r in signals) if n is not None]
-    costs = sum(float(r.slippage or 0) + float(r.charges or 0) for r in signals if r.status == "CLOSED")
-    gross = sum(float(r.gross_pnl) for r in signals if r.gross_pnl is not None)
+    every = list(signals) + list(ema)  # every alerted trade counts in the headline
+    nets = [n for n in (_net(r) for r in every) if n is not None]
+    costs = sum(float(r.slippage or 0) + float(r.charges or 0) for r in every if r.status == "CLOSED")
+    gross = sum(float(r.gross_pnl) for r in every if r.gross_pnl is not None)
     by_strat: dict = defaultdict(float)
     for r in signals:
         if _net(r) is not None:
             by_strat[r.strategy] += _net(r)
+    for r in ema:
+        if _net(r) is not None:
+            by_strat["9/21 EMA x3"] += _net(r)
 
     # Total card: the numbered trades
     top = c.y
     total = sum(nets) if nets else None
     c.rrect((PAD, top, W - PAD, top + 230), 44, CARD)
-    c.text((PAD + 40, top + 40), "Total P&L today · numbered trades", f_b, MUTED)
+    c.text((PAD + 40, top + 40), "Total P&L today · every alerted trade", f_b, MUTED)
     col = INK if total is None else GREEN if total > 0 else RED if total < 0 else INK
     c.text((PAD + 40, top + 90), _rs(total, sign=True), _font(76, True), col)
-    c.text((PAD + 40, top + 182), f"gross {_rs(gross) if signals else '–'} · slippage + charges "
-           f"{_rs(costs) if signals else '–'} · {len(nets)} closed of {len(signals)}", f_s, MUTED)
+    c.text((PAD + 40, top + 182), f"gross {_rs(gross) if every else '–'} · slippage + charges "
+           f"{_rs(costs) if every else '–'} · {len(nets)} closed of {len(every)}", f_s, MUTED)
     if total is not None:
         c.pill(W - PAD - 40, top + 135, "PROFIT" if total > 0 else "LOSS" if total < 0 else "FLAT",
                f_bb, col, GREEN_LIGHT if total > 0 else RED_LIGHT if total < 0 else LINE)
     c.y = top + 230 + 44
 
     best = max(by_strat.items(), key=lambda kv: kv[1]) if by_strat else None
-    badges = [(str(len(signals)), "Trades"),
-              (f"{sum(1 for x in nets if x > 0)}/{len(signals)}", "Winners"),
+    badges = [(str(len(every)), "Trades"),
+              (f"{sum(1 for x in nets if x > 0)}/{len(every)}", "Winners"),
               (best[0] if best else "–", "Best strategy"),
               (_short_rs(-costs) if costs else "–", "Costs")]
     r_b, step = 66, (W - 2 * PAD) / 4
@@ -196,8 +199,8 @@ def _layout(c: _Canvas, day: date, signals: list, ema: list) -> int:
                         c.pill(W - PAD - 40, y + 30, _rs(net, sign=True), f_bb,
                                GREEN if good else RED, GREEN_LIGHT if good else RED_LIGHT)
                 body.append((draw, 120))
-        note = (f"Same cross as EMA-921, 3 ways · total {_rs(sum(ema_nets), sign=True)} "
-                "(not in total)") if ema_nets else "Same cross as EMA-921, 3 ways"
+        note = (f"Same cross as EMA-921, 3 ways · subtotal {_rs(sum(ema_nets), sign=True)}"
+                if ema_nets else "Same cross as EMA-921, 3 ways")
         card("9/21 EMA paper engine", body, "", note)
 
     top = c.y

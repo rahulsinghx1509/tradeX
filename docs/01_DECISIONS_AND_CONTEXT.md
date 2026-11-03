@@ -460,13 +460,15 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   quantity, 1-minute open price and price after slippage, premium, exit plan (ORB: the range
   level; EMA-921: starting trailing-stop level). Exit message: same #, reason, prices, P&L.
   15:05 day report by trade number. Stale NIFTY data (> 3 min) = NO TRADE.
-- The older `ema-paper` service (all three modes of 9/21 EMA) keeps running; switch it off with
-  EMA921_PAPER_OFF=1 if the EMA-921 messages feel doubled.
+- The older `ema-paper` service (all three modes of 9/21 EMA) is OFF by default since 2026-11-03
+  (RK: "I don't need 3 or 4 alerts"): one alert per signal, from the signals service only.
+  EMA921_PAPER_OFF=0 in .env turns it back on.
 
 - 2026-11-03 RK: ONE day report for every trade of the day, whatever the strategy, and the
   picture shows the strategy next to each trade number ("Trade #12 · ORB-1.0"). The signals
   service sends it at 15:05 as text + picture (`app/live/report_card.py`); it also lists the 9/21
-  EMA paper engine's 3-mode legs (same cross as EMA-921, so their total is shown apart, not added).
+  EMA paper engine's 3-mode legs. Later the same day RK: the headline total must add up EVERY
+  alerted trade (numbered trades + those legs), so it does.
   The ema-paper service no longer sends its own report (`--own-report` turns it back on).
 
 ## 24. Intraday stocks: NIFTY 50 + NIFTY Next 50 (2026-11-03)

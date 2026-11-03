@@ -182,13 +182,14 @@ def exit_message(r: SignalTrade) -> str:
 
 
 def summary_message(day: date, rows: list[SignalTrade], ema: list | None = None) -> str:
-    """ONE report for every trade of the day: the numbered trades, then the 9/21 EMA paper
-    engine's 3-mode legs (same 5m cross as EMA-921, so its total is shown apart)."""
+    """ONE report for every trade alerted today: the numbered trades, then the 9/21 EMA paper
+    engine's 3-mode legs. The headline total adds up EVERY alerted trade (RK 2026-11-03)."""
     lines = [f"{PAPER} · Day report {day:%d %b %Y} · all strategies"]
     ema_lines = _ema_lines(ema or [])
     if not rows:
         lines.append("No numbered trades today.")
         lines += ema_lines
+        lines += _total_lines(rows, ema or [])
         lines.append("Paper trades only. No order was placed.")
         return "\n".join(lines)
     for r in sorted(rows, key=lambda x: x.id):
@@ -205,9 +206,8 @@ def summary_message(day: date, rows: list[SignalTrade], ema: list | None = None)
             nets = [float(r.net_pnl) for r in rs if r.net_pnl is not None]
             wins = sum(1 for x in nets if x > 0)
             lines.append(f"{code}: {len(rs)} trades, {wins} winners, net {_rs(sum(nets))}")
-    nets = [float(r.net_pnl) for r in rows if r.net_pnl is not None]
-    lines.append(f"Total net today (numbered trades): {_rs(sum(nets))}")
     lines += ema_lines
+    lines += _total_lines(rows, ema or [])
     lines.append("Paper trades only. No order was placed.")
     return "\n".join(lines)
 
@@ -215,7 +215,7 @@ def summary_message(day: date, rows: list[SignalTrade], ema: list | None = None)
 def _ema_lines(ema: list) -> list[str]:
     if not ema:
         return []
-    out = ["", "9/21 EMA paper engine (same 5m cross, 3 ways; not added to the total above):"]
+    out = ["", "9/21 EMA paper engine (same 5m cross, 3 ways):"]
     for r in sorted(ema, key=lambda x: (pd.Timestamp(x.entry_time), x.mode)):
         when = (f"{_hm(r.entry_time)} → {_hm(r.exit_time)}" if r.exit_time is not None
                 else f"{_hm(r.entry_time)} → still OPEN")
@@ -224,6 +224,13 @@ def _ema_lines(ema: list) -> list[str]:
     nets = [float(r.net_pnl) for r in ema if r.net_pnl is not None]
     out.append(f"9/21 EMA paper engine net: {_rs(sum(nets))}")
     return out
+
+
+def _total_lines(rows: list, ema: list) -> list[str]:
+    nets = [float(r.net_pnl) for r in list(rows) + list(ema) if r.net_pnl is not None]
+    still_open = sum(1 for r in list(rows) + list(ema) if r.net_pnl is None)
+    extra = f" ({still_open} still open, not counted)" if still_open else ""
+    return ["", f"TOTAL net today, every alerted trade ({len(nets)} closed): {_rs(sum(nets))}{extra}"]
 
 
 # ----------------------------------------------------------------------------- the step

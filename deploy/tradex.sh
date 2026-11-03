@@ -93,7 +93,7 @@ Usage: deploy/tradex.sh <command>
   day-report   send the ONE PAPER day report (text + picture, every strategy) to Telegram now (--date YYYY-MM-DD)
   stock-backtest IS-1.0: 3 intraday stock setups x long/short, scored on the fixed pass bar (reports/stock_backtest.md)
   ema-paper-once 9/21 EMA: run one PAPER-engine step now (the ema-paper service does this every minute)
-  stop-paper   stop the 9/21 EMA PAPER engine (it starts again on the next update unless EMA921_PAPER_OFF=1)
+  stop-paper   stop the 9/21 EMA PAPER engine (off by default; EMA921_PAPER_OFF=0 in .env turns it on)
   probe        how far back Groww keeps futures/options history and OI (reports/derivatives_probe.md)
   final        one-time final test of variant C on held-back years (reports/final_test.md)
   chat-id      print your Telegram chat ID

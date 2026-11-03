@@ -169,7 +169,8 @@ def test_one_day_report_covers_every_strategy_and_the_ema_paper_engine(session):
     msg = LE.summary_message(t0.date(), sig, ema)
     assert "#1 ORB-1.0" in msg and "#2 EMA-921" in msg and "still OPEN" in msg
     assert "9/21 EMA paper engine net: -₹3,993" in msg
-    assert "Total net today (numbered trades): ₹150" in msg
+    # RK 2026-11-03: the headline adds up EVERY alerted trade: 150 + (-3,993); #2 is still open
+    assert "TOTAL net today, every alerted trade (4 closed): -₹3,843 (1 still open, not counted)" in msg
     assert "9/21 EMA paper engine" in LE.summary_message(t0.date(), [], ema)
     for s_rows, e_rows in ((sig, ema), (sig, []), ([], ema), ([], [])):
         png = render_png(t0.date(), s_rows, e_rows)
