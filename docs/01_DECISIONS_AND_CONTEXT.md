@@ -551,4 +551,25 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Commands: `fut-load` (if not done), `spread-load`, then `spread-backtest`
   (reports/spread_backtest.md, spread_trades.csv). Backtest only; nothing is wired into the
   live PAPER engine until a row passes and RK approves.
-- Result: pending RK's server run.
+- Result (RK's server run 2026-11-05; Nov 2024 - Oct 2026, default slippage): **all 7 judged rows
+  FAIL**, so no held-back-year run and no re-tune.
+  - CS-150: 223 trades, gross +₹26.9k, costs ₹90.5k, net -₹63.6k (PF 0.46); CS-100 net -₹75.5k (0.30).
+    Same signals single-leg (ET ATM sell): gross +₹63.7k, net +₹13.1k (PF 1.07); without expiry-day
+    trades +₹24.0k (PF 1.20), seen after the fact, not tested.
+  - IC range days: 164 trades, gross +₹5.0k, costs ₹1.03L, net -₹97.6k (PF 0.10). Every day:
+    net -₹3.16L. Range filter skipped 237 wide-open days, 68 VIX days.
+  - DS-100 VF / DS-150 VF: gross -₹20k / -₹26k, net -₹88k / -₹93k (PF 0.24 / 0.36).
+  - TP-1.0 with limits: ATM 263 trades, gross -₹533, net -₹54.0k (PF 0.50); 1-ITM 194 trades,
+    net -₹47.6k (0.43). 2,573 signals skipped as RISK_TOO_BIG (₹500 on 65 units ≈ 15-point stop).
+    Without limits: 667 trades, gross -₹44.8k, net -₹1.88L (0.59).
+  - Lesson: hedge legs double the friction (≈ ₹400 a spread, ≈ ₹625 a condor) while the gross
+    edge stays small; trend-pullback buying loses even before costs.
+- **RK, 2026-11-05 (later):** the ₹500 / ₹2,500 limits were ChatGPT's, not his; research which
+  limits fit ₹1L, then "limit of loss as well as profit too as per standard market". RL-1.0 study
+  (`backend/app/spreads/risk.py`, `tradex.sh risk-sweep`), levels fixed before the run:
+  none; the plan (₹500 stop, 1.5R, ₹1k day, ₹2.5k week); 1% (₹1k stop, target 1.5R or 2R, ₹2k day
+  loss, ₹4k day profit lock, ₹5k week loss); 2% (₹2k stop, 1.5R or 2R, ₹3k day, ₹6k lock, ₹6k week).
+  Then RK: "make it trailing, if it's good": two trailing levels added before any run (1% / 2%:
+  stop 1R behind the best premium so far, breakeven at +1R, no target; same day/week limits).
+  ET ATM sell gets a premium stop/target; TP-1.0 its R target and risk cap. Study only: no PASS
+  verdicts, held-back year unused. Result: pending RK's run.

@@ -104,6 +104,17 @@ def futures_bars(fut: pd.DataFrame) -> dict[pd.Timestamp, FutBar]:
 
 
 # ----------------------------------------------------------------------------- the run
+@dataclass(frozen=True)
+class Limits:
+    """Loss limits in ₹ (per-trade estimated risk, day and week realised net loss)."""
+    per_trade: float | None = RISK_PER_TRADE
+    day: float | None = DAY_LOSS
+    week: float | None = WEEK_LOSS
+
+
+PLAN_LIMITS = Limits()  # the ChatGPT plan's ₹500 / ₹1,000 / ₹2,500
+
+
 @dataclass
 class Signal:
     cross: B.Cross  # direction, spot (entry close), bar_close: what EE._open needs
@@ -122,11 +133,12 @@ class _SpotMinutes:
         self.by_day = {k: g.reset_index(drop=True) for k, g in d.groupby(d["t"].dt.date)}
 
 
-def _exit_for(sig: Signal, day_min: pd.DataFrame, day_bars: list, sq: pd.Timestamp):
+def _exit_for(sig: Signal, day_min: pd.DataFrame, day_bars: list, sq: pd.Timestamp,
+              target_r: float = TARGET_R):
     """(exit time, reason, nifty) for a trade entered on `sig`, from 1m closes and 5m bars."""
     long = sig.cross.direction > 0
     entry, r = sig.cross.spot, sig.risk_points
-    target = entry + TARGET_R * r if long else entry - TARGET_R * r
+    target = entry + target_r * r if long else entry - target_r * r
     stall_lvl = entry + STALL_R * r if long else entry - STALL_R * r
     t0 = sig.cross.bar_close
     stall_t = t0 + timedelta(minutes=STALL_MINUTES)
@@ -159,9 +171,10 @@ def _exit_for(sig: Signal, day_min: pd.DataFrame, day_bars: list, sq: pd.Timesta
 
 
 def run(spot: pd.DataFrame, fut: pd.DataFrame, options: EE.OptionData, start: date, end: date,
-        base: EE.Config | None = None, modes=MODES, limits: bool = False,
-        holidays: frozenset[date] | None = None) -> EE.Result:
+        base: EE.Config | None = None, modes=MODES, limits: bool | Limits = False,
+        holidays: frozenset[date] | None = None, target_r: float = TARGET_R) -> EE.Result:
     cfg = config(base)
+    limits = PLAN_LIMITS if limits is True else (limits or None)
     bars = B.add_atr(B.add_emas(B.resample(spot, 5)))
     fb = futures_bars(fut)
     ranges = O.opening_ranges(spot)
@@ -192,7 +205,7 @@ def run(spot: pd.DataFrame, fut: pd.DataFrame, options: EE.OptionData, start: da
         made = 0
         for mode in modes:
             made += _run_day(mode, d, by_day.get(d, []), rng, fb, spot_min.get(d), sq, cfg,
-                             options, expiries, minutes, skips, trades[mode], limits)
+                             options, expiries, minutes, skips, trades[mode], limits, target_r)
         if not made:
             why.setdefault(d, "NO_SETUP")
     return EE.Result(cfg, trades, skips, dict(sorted(why.items())), days)
@@ -204,7 +217,7 @@ def _week_loss(done: list[EE.Trade], d: date) -> float:
 
 
 def _run_day(mode, d, day_bars, rng, fb, day_min, sq, cfg, options, expiries, minutes, skips,
-             done: list[EE.Trade], limits: bool) -> int:
+             done: list[EE.Trade], limits: Limits | None, target_r: float = TARGET_R) -> int:
     armed: dict[int, pd.Timestamp | None] = {1: None, -1: None}  # bar that armed the side
     pull: dict[int, float | None] = {1: None, -1: None}  # extreme since the pullback started
     busy_until: pd.Timestamp | None = None
@@ -243,17 +256,18 @@ def _run_day(mode, d, day_bars, rng, fb, day_min, sq, cfg, options, expiries, mi
                     if limits:
                         est = risk * DELTA[mode] * cfg.qty
                         day_net = -sum(x.net_pnl for x in done if x.day == d)
-                        if est > RISK_PER_TRADE:
+                        if limits.per_trade is not None and est > limits.per_trade:
                             skips.append(EE.Skip(mode, d, t, "RISK_TOO_BIG", f"₹{est:,.0f}"))
                             continue
-                        if day_net >= DAY_LOSS or _week_loss(done, d) >= WEEK_LOSS:
+                        if (limits.day is not None and day_net >= limits.day) or (
+                                limits.week is not None and _week_loss(done, d) >= limits.week):
                             skips.append(EE.Skip(mode, d, t, "LOSS_LIMIT"))
                             continue
                     sig = Signal(B.Cross(d, b.bar_start, t, s, float(b.close), n + 1), stop, risk)
                     tr = EE._open(mode, d, sig.cross, options, expiries, cfg, minutes, skips)
                     if tr is None:
                         continue
-                    at, reason, nifty = _exit_for(sig, day_min, day_bars, sq)
+                    at, reason, nifty = _exit_for(sig, day_min, day_bars, sq, target_r)
                     EE._close(tr, at, reason, nifty, cfg, minutes, {})
                     done.append(tr)
                     busy_until = at
