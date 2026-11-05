@@ -455,8 +455,8 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   switches to real alerts only after it passes its backtest and RK approves. Never orders.
 - Built: `backend/app/live/` + `signals` compose service (`scripts/signals_paper.py`). Each
   strategy re-runs its own backtest engine every minute (`as_of`), NIFTY weekly options, one mode
-  for all (ATM buy, 1 lot of 65; `SIGNALS_MODE` in .env). Table `signal_trades`; its id is the
-  trade number, counted across strategies and days. Entry message: trade #, strategy, contract,
+  for all (ATM buy, 1 lot of 65; `SIGNALS_MODE` in .env). Table `signal_trades`; column `trade_no` is the
+  trade number (see the 2026-11-05 note below). Entry message: trade #, strategy, contract,
   quantity, 1-minute open price and price after slippage, premium, exit plan (ORB: the range
   level; EMA-921: starting trailing-stop level). Exit message: same #, reason, prices, P&L.
   15:05 day report by trade number. Stale NIFTY data (> 3 min) = NO TRADE.
@@ -465,11 +465,15 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   EMA921_PAPER_OFF=0 in .env turns it back on.
 
 - 2026-11-03 RK: ONE day report for every trade of the day, whatever the strategy, and the
-  picture shows the strategy next to each trade number ("Trade #12 · ORB-1.0"). The signals
+  picture shows the strategy next to each trade number ("Trade #20261105-01 · ORB-1.0"). The signals
   service sends it at 15:05 as text + picture (`app/live/report_card.py`); it also lists the 9/21
   EMA paper engine's 3-mode legs. Later the same day RK: the headline total must add up EVERY
   alerted trade (numbered trades + those legs), so it does.
   The ema-paper service no longer sends its own report (`--own-report` turns it back on).
+- 2026-11-05 RK: trade numbers are date-based, `YYYYMMDD-NN` ("Trade #20261105-01"): the IST
+  trading day, then that day's count from 01 across ALL strategies. Used in entry/exit alerts and
+  the day report (text + picture). Migration 0009 numbered past trades the same way (per day, in
+  the order they were recorded).
 
 ## 24. Intraday stocks: NIFTY 50 + NIFTY Next 50 (2026-11-03)
 

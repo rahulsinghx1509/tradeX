@@ -1,6 +1,6 @@
 """ONE end-of-day PAPER report picture (PNG) for every trade of the day, whatever the strategy.
 
-- Numbered trades from the signals service (signal_trades): "Trade #12 · ORB-1.0", one row each.
+- Numbered trades from the signals service (signal_trades): "Trade #20261105-01 · ORB-1.0", one row each.
 - The 9/21 EMA paper engine's trades (paper_trades, the same 5-minute cross in 3 modes) in their
   own card. The headline total adds up EVERY alerted trade, these legs included (RK 2026-11-03).
 
@@ -36,6 +36,7 @@ from app.ema921.report_card import (
     _rs,
     _short_rs,
 )
+from app.live import engine as LE
 
 MODE_ICON = {"ITM_BUY": "ITM", "ATM_BUY": "ATM", "ATM_SELL": "SELL"}
 
@@ -68,7 +69,7 @@ def _layout(c: _Canvas, day: date, signals: list, ema: list) -> int:
     c.text((PAD + 8, c.y), f"All strategies · {day:%a %d %b %Y}", f_sub, MUTED)
     c.y += 70
 
-    signals = sorted(signals, key=lambda r: r.id)
+    signals = sorted(signals, key=LE._order)
     every = list(signals) + list(ema)  # every alerted trade counts in the headline
     nets = [n for n in (_net(r) for r in every) if n is not None]
     costs = sum(float(r.slippage or 0) + float(r.charges or 0) for r in every if r.status == "CLOSED")
@@ -138,14 +139,14 @@ def _layout(c: _Canvas, day: date, signals: list, ema: list) -> int:
     for r in signals:
         net = _net(r)
         good = net is not None and net > 0
-        head = f"Trade #{r.id} · {r.strategy}"
+        head = f"Trade #{LE.label(r)} · {r.strategy}"
         times = f"{_hm(r.entry_time)} → {_hm(r.exit_time)} · {_why(r)}"
         leg = f"{r.side} {float(r.strike):g} {r.option_type} · {_px(r.entry_fill)} → {_px(r.exit_fill)}"
         cash = _cash(r, r.lot_size, net)
         arrow, acol = ("▲ LONG", GREEN) if r.direction > 0 else ("▼ SHORT", RED)
 
         def draw(y, head=head, times=times, leg=leg, cash=cash, net=net, good=good, arrow=arrow,
-                 acol=acol, rid=r.id):
+                 acol=acol, rid=LE.label(r).rsplit("-", 1)[-1]):
             c.rrect((PAD + 40, y + 6, PAD + 128, y + 94), 22, BLUE_LIGHT)
             label = f"#{rid}"
             c.text((PAD + 84, y + 50), label, _font(30 if len(label) < 4 else 24, True), BLUE,

@@ -340,14 +340,18 @@ class PaperTrade(Base):
 class SignalTrade(Base):
     """A PAPER trade from the multi-strategy signal engine (app/live). Never a real order.
 
-    `id` is the trade number shown in every Telegram message ("Trade #12"), counted across all
-    strategies and days. One row per (strategy, day, entry signal)."""
+    `trade_no` is the trade number shown in every Telegram message and the day report:
+    YYYYMMDD-NN ("Trade #20261105-01"), NN counting from 01 each IST trading day across all
+    strategies (RK 2026-11-05). `id` is only the database key. One row per (strategy, day,
+    entry signal)."""
 
     __tablename__ = "signal_trades"
     __table_args__ = (UniqueConstraint("strategy", "trade_date", "signal_time",
-                                       name="uq_signal_trade"),)
+                                       name="uq_signal_trade"),
+                      UniqueConstraint("trade_no", name="uq_signal_trade_no"))
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trade_no: Mapped[str | None] = mapped_column(String(16))  # 20261105-01
     strategy: Mapped[str] = mapped_column(String(16))  # EMA-921 / ORB-1.0 / ET-1.0
     trade_date: Mapped[date] = mapped_column(Date, index=True)
     mode: Mapped[str] = mapped_column(String(10))  # ITM_BUY / ATM_BUY / ATM_SELL

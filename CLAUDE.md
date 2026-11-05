@@ -56,7 +56,7 @@ Read these before doing any work:
 - 🔀 2026-11-02 RK: backtest ORB-1.0 (opening-range breakout) and ET-1.0 (9/21 EMA + 15m trend
   filter) on NIFTY and BANKNIFTY options, pass bar fixed first (docs/01 §22). `backend/app/orb/`,
   `ema921/trend.py`, `tradex.sh orb-load` / `orb-et-backtest`. Result 2026-11-03: all 12 rows FAIL (best NIFTY ET ATM sell, PF 1.05). Auto-trading on hold.
-- 🔀 2026-11-03 RK: EMA-921, ORB-1.0 and ET-1.0 run live as numbered PAPER signals (`backend/app/live/`,
+- 🔀 2026-11-03 RK: EMA-921, ORB-1.0 and ET-1.0 run live as numbered PAPER signals (`backend/app/live/`, trade numbers `YYYYMMDD-NN` since 2026-11-05,
   `signals` service, table `signal_trades`; docs/01 §23). Real alerts only after a strategy passes and RK approves.
 - 🔀 2026-11-03 RK: intraday STOCKS (NIFTY 50 + Next 50), docs/01 §24: `stock-load` then `stock-backtest`
   (IS-1.0: ORB / VWAP pullback / gap-and-go, long + short). Result 2026-11-03: all 6 rows FAIL; no scanner built.
