@@ -205,3 +205,14 @@ def exits(ps: list[Position]) -> str:
         r = p.legs[0].exit_reason if p.legs else p.exit_reason
         c[r] = c.get(r, 0) + 1
     return ", ".join(f"{k} {v}" for k, v in sorted(c.items(), key=lambda kv: -kv[1]))
+
+
+# ----------------------------------------------------------------------------- RL-1.0 held-back test
+# Fixed 2026-11-05 after the development-years sweep (docs/01 §26), BEFORE the held-back year is
+# looked at: ET-1.0 ATM sell, no trades on weekly expiry days, the "2% trail" level (₹2,000 1R
+# trailing stop on the premium, no target, ₹3,000 day loss, ₹6,000 day profit lock, ₹6,000 week
+# loss). One run on Nov 2023 - Oct 2024 (`tradex.sh et-holdout`, refused a second time; it shares
+# the held-back-year marker with spread-backtest). Bar: net > 0 and profit factor >= 1.05.
+# Chosen from 24 combinations on the same 2 years, so a pass here is the only evidence that counts.
+HOLDOUT_LEVEL = next(lv for lv in LEVELS if lv.name == "2% trail")
+HOLDOUT_PF = 1.05

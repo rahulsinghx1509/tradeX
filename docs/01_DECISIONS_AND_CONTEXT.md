@@ -572,4 +572,16 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   Then RK: "make it trailing, if it's good": two trailing levels added before any run (1% / 2%:
   stop 1R behind the best premium so far, breakeven at +1R, no target; same day/week limits).
   ET ATM sell gets a premium stop/target; TP-1.0 its R target and risk cap. Study only: no PASS
-  verdicts, held-back year unused. Result: pending RK's run.
+  verdicts, held-back year unused.
+- RL-1.0 result (RK's run 2026-11-05, 2 development years):
+  - TP-1.0: every level loses (PF 0.43-0.69, -₹47k to -₹2.0L); trailing a little better than fixed
+    targets. Most exits are STOP or INVALID: the entry is the problem, not the exits.
+  - ET ATM sell, all days: none ₹13.1k (1.07); 2% trail ₹198 (1.00); 2% 1:1.5 / 1:2 -₹10.3k (0.94);
+    1% trail -₹33.3k (0.69). Without expiry-day trades: none +₹24.0k (1.20, years +₹29.4k / -₹5.4k);
+    **2% trail +₹11.9k (PF 1.12, years +₹8.7k / +₹3.2k, max DD 12.7%, worst week -₹5.7k)**;
+    2% 1:2 +₹10.0k (1.09); 2% 1:1.5 +₹6.8k (1.06); 1% trail -₹7.6k (0.90); 1% 1:2 -₹21.3k (0.79);
+    plan ₹500 -₹30.1k (0.52). Stops of ₹500-1,000 (8-15 premium points) are inside normal noise.
+  - The best combination was picked from 24 on the same data, so it is fixed as ONE held-back-year
+    test (`tradex.sh et-holdout`, rule in `backend/app/spreads/risk.py`: ET ATM sell, no expiry
+    days, 2% trail, ₹3k day loss / ₹6k day lock / ₹6k week loss; bar net > 0 and PF >= 1.05).
+    Selling an ATM option unhedged likely needs more than ₹1L margin (NOT_VERIFIED).
