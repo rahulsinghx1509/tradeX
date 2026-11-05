@@ -13,6 +13,16 @@ day's loss limit, stop for the week at 5-6% down):
 | 1% 1:2       | ₹1,000       | ₹2,000         | ₹2,000   | ₹4,000          | ₹5,000    |
 | 2% 1:1.5     | ₹2,000       | ₹3,000         | ₹3,000   | ₹6,000          | ₹6,000    |
 | 2% 1:2       | ₹2,000       | ₹4,000         | ₹3,000   | ₹6,000          | ₹6,000    |
+| 1% trail     | ₹1,000 trail | none           | ₹2,000   | ₹4,000          | ₹5,000    |
+| 2% trail     | ₹2,000 trail | none           | ₹3,000   | ₹6,000          | ₹6,000    |
+
+Trailing levels (added 2026-11-05 at RK's ask, still before any run): the stop starts at the stop
+₹ (1R) away from the entry premium and follows the best premium seen so far at that same 1R
+distance, never loosening (a sell: stop = lowest low so far + R; a buy: highest high so far - R).
+So at +1R it reaches breakeven and after that it locks profit. No fixed target: the trade runs
+until the trail is hit or its normal exit. Each candle is checked against the stop from the
+candles BEFORE it, then the best price is updated (the worse order is assumed inside a candle).
+TP-1.0 trailing rows keep its index stop and risk cap, drop its R target, and add this trail.
 
 How each part works:
 - ET ATM sell (no stop of its own): the stop and target are on the OPTION premium, 1 lot of 65.
@@ -50,6 +60,7 @@ class Level:
     day: float | None  # day loss limit, ₹
     week: float | None  # week loss limit, ₹
     day_profit: float | None  # day profit lock, ₹
+    trail: bool = False  # trailing stop at 1R behind the best premium, no target
 
     @property
     def target(self) -> float | None:
@@ -61,7 +72,45 @@ LEVELS = (Level("NONE", None, None, None, None, None),
           Level("1% 1:1.5", 1000, 1.5, 2000, 5000, 4000),
           Level("1% 1:2", 1000, 2.0, 2000, 5000, 4000),
           Level("2% 1:1.5", 2000, 1.5, 3000, 6000, 6000),
-          Level("2% 1:2", 2000, 2.0, 3000, 6000, 6000))
+          Level("2% 1:2", 2000, 2.0, 3000, 6000, 6000),
+          Level("1% trail", 1000, None, 2000, 5000, 4000, trail=True),
+          Level("2% trail", 2000, None, 3000, 6000, 6000, trail=True))
+
+
+def apply_exit_rule(tr: EE.Trade, m: EE._Minutes, level: Level, cfg: EE.Config) -> EE.Trade:
+    """The level's per-trade exit: fixed stop + target, or the trailing stop (or nothing)."""
+    if level.stop is None:
+        return tr
+    if level.trail:
+        return trailing(tr, m, level.stop, cfg)
+    return stop_target(tr, m, level.stop, level.target, cfg)
+
+
+def trailing(tr: EE.Trade, m: EE._Minutes, stop_rs: float, cfg: EE.Config) -> EE.Trade:
+    """A copy of `tr` exited by a 1R trailing stop on the premium, if hit before its exit."""
+    if tr.exit_time is None or not m.times:
+        return tr
+    sell = tr.side == "SELL"
+    r = stop_rs / cfg.qty
+    best = tr.entry_price
+    stop = best + r if sell else best - r
+    start, end = pd.Timestamp(tr.entry_time), pd.Timestamp(tr.exit_time)
+    rows = m.df[(m.df["t"] >= start) & (m.df["t"] < end)]
+    for row in rows.itertuples(index=False):
+        hi = row.high if pd.notna(row.high) else row.close
+        lo = row.low if pd.notna(row.low) else row.close
+        if pd.isna(hi) or pd.isna(lo):
+            continue
+        o = row.open if pd.notna(row.open) else None
+        if hi >= stop if sell else lo <= stop:
+            gap = o is not None and (o >= stop if sell else o <= stop) and row.t > start
+            # TRAIL_STOP once the trail has reached breakeven or better, else a plain STOP
+            reason = "TRAIL_STOP" if (stop <= tr.entry_price if sell
+                                      else stop >= tr.entry_price) else "STOP"
+            return _refill(tr, row.t, max(C.TICK, float(o) if gap else stop), reason, cfg)
+        best = min(best, lo) if sell else max(best, hi)
+        stop = min(stop, best + r) if sell else max(stop, best - r)
+    return tr
 
 
 # ----------------------------------------------------------------------------- per-trade stop/target

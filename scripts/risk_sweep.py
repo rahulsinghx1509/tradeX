@@ -61,8 +61,7 @@ def main() -> int:
 
         rows = []
         for lv in RK.LEVELS:
-            trades = et_trades if lv.stop is None else [
-                RK.stop_target(t, mins(t), lv.stop, lv.target, base) for t in et_trades]
+            trades = [RK.apply_exit_rule(t, mins(t), lv, base) for t in et_trades]
             ps = E.single("ET ATM sell", trades)
             for name, sub in (("ET ATM sell, all days", ps),
                               ("ET ATM sell, no expiry days (info)",
@@ -76,16 +75,20 @@ def main() -> int:
                 print(f"TP-1.0 {mode} {lv.name}...")
                 # per-trade cap and R target in the engine; day/week limits afterwards (risk.py)
                 lim = False if lv.stop is None else TP.Limits(lv.stop, None, None)
-                res = TP.run(spot, fut, opts, start, end, base, (mode,), lim,
-                             target_r=lv.reward or TP.TARGET_R)
-                ps, skipped = RK.apply_day_week(E.single("TP", res.trades[mode]), lv)
+                target_r = 1e9 if lv.trail else (lv.reward or TP.TARGET_R)  # trail: no target
+                res = TP.run(spot, fut, opts, start, end, base, (mode,), lim, target_r=target_r)
+                tp = res.trades[mode]
+                if lv.trail:
+                    tp = [RK.trailing(t, mins(t), lv.stop, base) for t in tp if t.exit_time]
+                ps, skipped = RK.apply_day_week(E.single("TP", tp), lv)
                 skipped += sum(1 for s in res.skips if s.reason == "RISK_TOO_BIG")
                 rows.append(line(f"TP-1.0 {mode.replace('_', ' ')}", lv, ps, skipped, base.capital,
                                  start))
     head = ["# RL-1.0: loss and profit limits for a ₹1 lakh account", "",
             f"Range {start} to {end} (development years only). Levels fixed before the run "
             "(backend/app/spreads/risk.py). Study only: no PASS verdicts, held-back year unused.", "",
-            "Levels: stop a trade / target (R) / day loss / day profit lock / week loss. ET ATM sell: "
+            "Levels: stop a trade / target (R) or 1R trailing stop / day loss / day profit lock / "
+            "week loss. ET ATM sell: "
             "stop and target on the option premium. TP-1.0: stop = largest allowed 1-lot risk, "
             "target = R x its index stop. Day/week limits stop NEW entries only.", "",
             "| Strategy | Limits | Trades | Skipped | Net | PF | Year 1 | Year 2 | Max DD | "

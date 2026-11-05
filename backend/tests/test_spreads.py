@@ -309,3 +309,25 @@ def test_premium_stop_and_target_on_a_sell():
     flat_px = lambda i: 100.0  # noqa: E731
     tr, m = _sell_trade(flat_px)
     assert RK.stop_target(tr, m, 1300, 1950, cfg) is tr  # neither hit: unchanged
+
+
+def test_trailing_stop_locks_profit_on_a_sell():
+    from app.spreads import risk as RK
+
+    cfg = replace(CFG, slippage_pct=0, slippage_points=0)
+    # R = ₹1,300 = 20 points. Premium falls 100 -> 60 by minute 85, then rises again.
+    def path(i):
+        if i <= 45:
+            return 100.0
+        if i <= 85:
+            return 100.0 - (i - 45)
+        return 60.0 + (i - 85)
+    tr, m = _sell_trade(path)
+    out = RK.trailing(tr, m, 1300, cfg)
+    # lowest low 59 (close 60 - 1) -> stop 79; the high (close + 1) reaches 79 at close 78
+    assert out.exit_reason == "TRAIL_STOP" and out.exit_price == 79
+    assert out.gross_pnl == pytest.approx((100 - 79) * 65)
+    # straight loss: the entry candle's low 99 tightens the stop to 119 (still a loss = STOP)
+    tr, m = _sell_trade(lambda i: 100.0 + max(0, i - 45))
+    out = RK.trailing(tr, m, 1300, cfg)
+    assert out.exit_reason == "STOP" and out.exit_price == 119

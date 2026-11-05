@@ -569,5 +569,7 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   (`backend/app/spreads/risk.py`, `tradex.sh risk-sweep`), levels fixed before the run:
   none; the plan (₹500 stop, 1.5R, ₹1k day, ₹2.5k week); 1% (₹1k stop, target 1.5R or 2R, ₹2k day
   loss, ₹4k day profit lock, ₹5k week loss); 2% (₹2k stop, 1.5R or 2R, ₹3k day, ₹6k lock, ₹6k week).
+  Then RK: "make it trailing, if it's good": two trailing levels added before any run (1% / 2%:
+  stop 1R behind the best premium so far, breakeven at +1R, no target; same day/week limits).
   ET ATM sell gets a premium stop/target; TP-1.0 its R target and risk cap. Study only: no PASS
   verdicts, held-back year unused. Result: pending RK's run.
