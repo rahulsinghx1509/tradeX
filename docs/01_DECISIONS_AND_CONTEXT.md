@@ -585,3 +585,14 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
     test (`tradex.sh et-holdout`, rule in `backend/app/spreads/risk.py`: ET ATM sell, no expiry
     days, 2% trail, ₹3k day loss / ₹6k day lock / ₹6k week loss; bar net > 0 and PF >= 1.05).
     Selling an ATM option unhedged likely needs more than ₹1L margin (NOT_VERIFIED).
+- **RL-1.0 held-back-year result (RK's run 2026-11-05, Nov 2023 - Oct 2024, run once): PASS.**
+  79 trades, net +₹11,311, PF 1.28, max DD 11.3%, worst trade -₹2,210, worst day -₹2,296, worst
+  week -₹2,854; day/week limits skipped 0 entries. Exits: opposite cross 38, square-off 16, stop
+  15, trail stop 10. Same trades with no stop and no limits: net -₹1,553 (PF 0.97), so the 2%
+  trailing stop, not the expiry-day filter, made the difference on unseen data.
+  - Across 3 years (2 development + held-back) the rule is positive in each year:
+    +₹8.7k, +₹3.2k, +₹11.3k. Still a small sample (about 80 trades a year, a few hundred ₹ a
+    trade), so it is evidence, not proof.
+  - Not yet checked: margin for an unhedged ATM sell on ₹1L (NOT_VERIFIED, likely more than ₹1L);
+    live fills vs the assumed 0.5% + 0.5 pt slippage. Next step (needs RK's approval): run it as a
+    PAPER signal next to EMA-921 / ORB-1.0 / ET-1.0. No real orders.

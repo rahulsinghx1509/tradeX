@@ -66,6 +66,8 @@ Read these before doing any work:
 - 🔀 2026-11-05 RK: SP-1.0 spreads (ET credit spreads, range-day iron condor, ORB+volume debit spreads)
   and TP-1.0 trend-pullback option buying with ₹500/₹1k/₹2.5k limits (docs/01 §26), `backend/app/spreads/`,
   `backend/app/pullback/`, `tradex.sh spread-load` / `spread-backtest`. Result 2026-11-05: all 7 judged rows FAIL.
+- 🔀 2026-11-05 RL-1.0 (docs/01 §26): ET-1.0 ATM sell, no expiry days, ₹2k 1R trailing stop, ₹3k day loss / ₹6k day lock / ₹6k week loss
+  (`backend/app/spreads/risk.py`) **PASSED the one-time held-back-year test** (net +₹11.3k, PF 1.28). Second tested rule after VJ-1.0. PAPER only, pending RK.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
