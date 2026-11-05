@@ -6,6 +6,7 @@ without a price for every leg is skipped and listed with its reason.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 
@@ -24,7 +25,9 @@ VIX_LOOKBACK = 5
 class Config:
     entry: time = time(9, 20)
     exit: time = time(15, 15)
-    wing_points: int = 500
+    wing_points: int = 500  # wing distance beyond the sold strike
+    short_offset: int = 0  # sold strikes at ATM +/- this (0 = straddle; SP-1.0 condor 150)
+    close_wing_with_stop: bool = False  # SP-1.0: a stopped side also sells its wing
     stop_pct: float = 0.30  # stop on each sold leg: entry price x 1.30
     lot_size: int = 65
     slippage_pct: float = 0.005
@@ -114,9 +117,9 @@ def vix_status(day: date, vix_closes: pd.Series | None, holidays=None) -> str:
 # ----------------------------------------------------------------------------- one day
 def legs_for(atm: float, cfg: Config) -> list[tuple[str, str, str, float]]:
     """(role, side, option type, strike) of the four legs."""
-    w = cfg.wing_points
-    return [("SHORT_CE", "SELL", "CE", atm), ("SHORT_PE", "SELL", "PE", atm),
-            ("WING_CE", "BUY", "CE", atm + w), ("WING_PE", "BUY", "PE", atm - w)]
+    w, k = cfg.wing_points, cfg.short_offset
+    return [("SHORT_CE", "SELL", "CE", atm + k), ("SHORT_PE", "SELL", "PE", atm - k),
+            ("WING_CE", "BUY", "CE", atm + k + w), ("WING_PE", "BUY", "PE", atm - k - w)]
 
 
 def spot_at_entry(spot_day: pd.DataFrame, day: date, cfg: Config) -> float | None:
@@ -188,14 +191,24 @@ def run_day(day: date, spot_day: pd.DataFrame, options: OptionData, cfg: Config,
                                                                cfg.slippage_points)
         trade.legs.append(Leg(role, side, opt, strike, symbol, t.to_pydatetime(), price, fill))
         minutes[role] = m
-    for leg in trade.legs:
+    stopped_at: dict[str, pd.Timestamp] = {}  # option type -> minute its sold leg was stopped
+    for leg in sorted(trade.legs, key=lambda x: x.side != "SELL"):  # sold legs first
         m = minutes[leg.role]
         if leg.side == "SELL":
             hit = _stop_exit(m, pd.Timestamp(leg.entry_time), exit_t,
                              leg.entry_price * (1 + cfg.stop_pct))
             if hit is not None:
                 _settle(leg, hit[0], hit[1], "STOP", False, day, cfg)
+                stopped_at[leg.option_type] = hit[0]
                 continue
+        elif cfg.close_wing_with_stop and leg.option_type in stopped_at:
+            t_next = stopped_at[leg.option_type] + timedelta(minutes=1)
+            out = m.open_at(t_next, cfg.fill_grace_minutes)
+            stale = out is None
+            if out is None:
+                out = m.last_before(t_next) or (pd.Timestamp(leg.entry_time), leg.entry_price)
+            _settle(leg, out[0], out[1], "STOP", stale, day, cfg)
+            continue
         out = m.open_at(exit_t, cfg.fill_grace_minutes)
         stale = out is None
         if out is None:
@@ -206,7 +219,9 @@ def run_day(day: date, spot_day: pd.DataFrame, options: OptionData, cfg: Config,
 
 # ----------------------------------------------------------------------------- the run
 def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Config,
-        vix_closes: pd.Series | None = None, holidays=None) -> Result:
+        vix_closes: pd.Series | None = None, holidays=None,
+        day_filter: Callable[[date], str | None] | None = None) -> Result:
+    """`day_filter` (SP-1.0 condor): returns a skip reason for a day, or None to trade it."""
     times = pd.to_datetime(spot["time"], utc=True).dt.tz_convert(IST) if not spot.empty else None
     by_day = dict(tuple(spot.groupby(times.dt.date))) if times is not None else {}
     expiries = sorted(options.expiries())
@@ -223,6 +238,8 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
             skipped[d] = "NO_SPOT_DATA"
         elif cfg.vix_filter and (v := vix_status(d, vix_closes, holidays)) != "CLEAR":
             skipped[d] = "VIX_JUMP" if v == "JUMP" else "NO_VIX"
+        elif day_filter is not None and (why := day_filter(d)) is not None:
+            skipped[d] = why
         else:
             trade, why = run_day(d, by_day[d], options, cfg, expiries)
             if trade is None:

@@ -523,3 +523,32 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Commands: `fut-load` (Groww 1-minute futures, last 3 years; whether expired futures are
   served at 1 minute is NOT_VERIFIED), then `volume-backtest` (reports/volume_backtest.md).
 - The live filter is switched on only if a row passes and RK approves. Result: pending.
+
+## 26. SP-1.0 option spreads and TP-1.0 trend-pullback buying (2026-11-05)
+
+- **RK, 2026-11-05:** gave a list of option strategies (long call/put, bull/bear debit spreads,
+  iron condor, bull put / bear call credit spreads, short strangle) and asked which 2-3 to apply
+  next. Coordinator recommended (from our own results: buying lost most, ATM selling came closest,
+  ~₹300/trade costs killed every edge): (1) credit spreads in the ET-1.0 direction, (2) an intraday
+  iron condor on range days only, (3) debit spreads on strong breakouts. Skip naked long options
+  (worst in our tests) and the short strangle (unlimited risk, margin far above ₹1L).
+  **RK: "go ahead"** (backtest + PAPER only, no real orders).
+- Same day RK shared a ChatGPT plan for a ₹1L account and said "go for it": add its NIFTY
+  trend-pullback option buy (9/21 EMA + VWAP + 15-minute opening range, ATM or 1-ITM, 1.5R target,
+  30-minute stall exit, no 12:00-13:30 or after 14:45, no expiry days) with its risk limits:
+  ₹500 a trade, ₹1,000 a day, ₹2,500 a week, at most 2 trades a day.
+- Rules fixed before any result: `backend/app/spreads/__init__.py` (SP-1.0: CS-100/150 credit
+  spreads on ET-1.0 signals, IC range-day condor ±150 with 200-point wings and 1.5x stops per side,
+  DS-100/150 debit spreads on ORB-1.0 + RVOL >= 1.5) and `backend/app/pullback/__init__.py`
+  (TP-1.0; VWAP from NIFTY near-month futures because the index has no volume; the ₹500 risk check
+  uses an assumed delta of 0.5 / 0.6, NOT_VERIFIED).
+- Pass bar on the 2 development years at default slippage (every leg pays slippage and costs):
+  >= 50 trades, net > 0, PF >= 1.10, each year net > 0, max DD < 50% of ₹1L. 7 judged rows
+  (CS-100, CS-150, IC range days, DS-100 VF, DS-150 VF, TP ATM buy limits, TP 1-ITM buy limits);
+  the other rows are comparisons. Every row is also shown without trades taken on weekly expiry
+  days (information only). Only the single best passing row gets ONE held-back-year run
+  (Nov 2023 - Oct 2024, `spread-backtest --holdout ROW`, refused a second time): net > 0, PF >= 1.05.
+- Commands: `fut-load` (if not done), `spread-load`, then `spread-backtest`
+  (reports/spread_backtest.md, spread_trades.csv). Backtest only; nothing is wired into the
+  live PAPER engine until a row passes and RK approves.
+- Result: pending RK's server run.

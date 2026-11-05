@@ -39,6 +39,9 @@ EXIT_LABELS = {"OPPOSITE_CROSS": "opposite cross", "TRAIL_STOP": "trailing stop"
 START_CHOICES = (time(9, 30), time(10, 0), time(10, 30))
 CUTOFF_CHOICES = tuple(time(h, m) for h, m in
                        [(11, 30), (12, 0), (12, 30), (13, 0), (13, 30), (14, 0), (14, 30)])
+# Extra leg kinds other packages register (app/spreads adds its hedge/short legs here):
+# mode -> function(direction, atm strike, cfg) -> (BUY/SELL, CE/PE, strike).
+EXTRA_LEGS: dict[str, Callable[[int, float, Config], tuple[str, str, float]]] = {}
 
 
 @dataclass(frozen=True)
@@ -144,6 +147,8 @@ def leg_for(mode: str, direction: int, spot: float, cfg: Config) -> tuple[str, s
     Bullish: ITM buy CE, ATM buy CE, ATM sell PE. Bearish: the mirror image.
     """
     atm = atm_strike(spot, cfg.strike_step)
+    if mode in EXTRA_LEGS:
+        return EXTRA_LEGS[mode](direction, atm, cfg)
     if mode == "ATM_SELL":
         return "SELL", "PE" if direction > 0 else "CE", atm
     opt = "CE" if direction > 0 else "PE"
