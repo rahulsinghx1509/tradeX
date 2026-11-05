@@ -65,7 +65,7 @@ Read these before doing any work:
   entry filter on EMA-921/ORB/ET. Result pending; filter goes live only if it passes and RK approves.
 - 🔀 2026-11-05 RK: SP-1.0 spreads (ET credit spreads, range-day iron condor, ORB+volume debit spreads)
   and TP-1.0 trend-pullback option buying with ₹500/₹1k/₹2.5k limits (docs/01 §26), `backend/app/spreads/`,
-  `backend/app/pullback/`, `tradex.sh spread-load` / `spread-backtest`. Result pending.
+  `backend/app/pullback/`, `tradex.sh spread-load` / `spread-backtest`. Result 2026-11-05: all 7 judged rows FAIL.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
