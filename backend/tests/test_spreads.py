@@ -244,3 +244,25 @@ def test_report_renders():
             E.run_debit(spot, FakeOptions(spot), DAY, DAY, CFG, holidays=HOL).items()]
     md = R.to_markdown(rows, {"coverage": 1.0}, DAY, DAY, 100_000, True, "t")
     assert "DS-100" in md and "fail" in md
+
+
+# ----------------------------------------------------------------------------- RL-1.0 limits
+def test_day_and_week_limits_stop_new_entries():
+    from app.spreads import risk as RK
+
+    d1, d2, d3 = date(2026, 10, 12), date(2026, 10, 13), date(2026, 10, 14)  # same week
+    ps = [_pos(d1, -1500.0), _pos(d1, -800.0), _pos(d1, 300.0),  # 3rd skipped: day loss 2,300
+          _pos(d2, -2500.0), _pos(d2, 100.0),                     # 2nd skipped: day loss 2,500
+          _pos(d3, 700.0)]                                         # week loss 4,800 < 5,000: taken
+    kept, skipped = RK.apply_day_week(ps, RK.Level("t", None, 2000, 5000))
+    assert [p.net_pnl for p in kept] == [-1500.0, -800.0, -2500.0, 700.0] and skipped == 2
+    kept, skipped = RK.apply_day_week(ps, RK.Level("t", None, 2000, 4000))
+    assert [p.net_pnl for p in kept] == [-1500.0, -800.0, -2500.0] and skipped == 3
+    assert RK.worst_period(ps, weekly=False) == -2400.0 and RK.over(ps, 1000) == 2
+
+
+def test_tp_custom_per_trade_limit():
+    spot = spot_frame((WARM, flat), (DAY, pullback_path))
+    lim = TP.Limits(per_trade=1000, day=2000, week=5000)  # 1-ITM risk ₹566 now fits
+    res = TP.run(spot, fut_from(spot), FakeOptions(spot), DAY, DAY, limits=lim, holidays=HOL)
+    assert len(res.trades["ITM1_BUY"]) == 1

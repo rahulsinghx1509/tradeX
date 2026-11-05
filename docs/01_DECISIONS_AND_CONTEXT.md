@@ -564,3 +564,9 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
     Without limits: 667 trades, gross -₹44.8k, net -₹1.88L (0.59).
   - Lesson: hedge legs double the friction (≈ ₹400 a spread, ≈ ₹625 a condor) while the gross
     edge stays small; trend-pullback buying loses even before costs.
+- **RK, 2026-11-05 (later):** the ₹500 / ₹2,500 limits were ChatGPT's, not his; research which
+  limits fit ₹1L. RL-1.0 study (`backend/app/spreads/risk.py`, `tradex.sh risk-sweep`), levels fixed
+  before the run: none; 0.5/1/2.5% (the plan); 1/2/5% (₹1k trade / ₹2k day / ₹5k week); 2/3/6%.
+  Applied to ET ATM sell (day/week only: it has no stop) and TP-1.0 (all three). Study only: no PASS
+  verdicts, held-back year unused. Limits change loss size and drawdown, not whether a trade has an
+  edge. Result: pending RK's run.
