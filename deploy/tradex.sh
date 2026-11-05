@@ -47,6 +47,8 @@ case "${1:-help}" in
   day-report) script day_report.py "${@:2}" ;;
   stock-backtest) script stock_backtest.py "${@:2}" && echo "Report: reports/stock_backtest.md" ;;
   orb-et-backtest) script orb_et_backtest.py "${@:2}" && echo "Report: reports/orb_et_backtest.md" ;;
+  fut-load) script fut_load.py "${@:2}" ;;
+  volume-backtest) script volume_backtest.py "${@:2}" && echo "Report: reports/volume_backtest.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
@@ -91,6 +93,8 @@ Usage: deploy/tradex.sh <command>
   orb-et-backtest ORB-1.0 breakout + ET-1.0 EMA trend filter on NIFTY and BANKNIFTY, scored on the fixed pass bar
   stock-load   intraday stocks: NIFTY 50 + Next 50 member lists + 5-minute candles from Groww, 3 years (safe to re-run)
   day-report   send the ONE PAPER day report (text + picture, every strategy) to Telegram now (--date YYYY-MM-DD)
+  fut-load     VF-1.0: load NIFTY near-month futures 1-min candles (volume) from Groww, last 3 years; re-runnable
+  volume-backtest VF-1.0: EMA-921 / ORB / ET with and without the futures volume filter, fixed pass bar
   stock-backtest IS-1.0: 3 intraday stock setups x long/short, scored on the fixed pass bar (reports/stock_backtest.md)
   ema-paper-once 9/21 EMA: run one PAPER-engine step now (the ema-paper service does this every minute)
   stop-paper   stop the 9/21 EMA PAPER engine (off by default; EMA921_PAPER_OFF=0 in .env turns it on)

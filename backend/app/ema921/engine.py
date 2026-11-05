@@ -20,6 +20,7 @@ closes (#1). Missing data is never filled with zero: an entry without a price is
 from __future__ import annotations
 
 import bisect
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Protocol
@@ -243,9 +244,13 @@ def no_trade_days(spot: pd.DataFrame, start: date, end: date, cfg: Config,
 
 def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Config,
         modes: tuple[str, ...] = MODES, holidays: frozenset[date] | None = None,
-        as_of: pd.Timestamp | None = None) -> Result:
+        as_of: pd.Timestamp | None = None,
+        entry_filter: Callable[[B.Cross], bool] | None = None) -> Result:
     """Backtest [start, end]. `spot` should also hold some days BEFORE `start` so the EMAs are
     warmed up (#3); those days are never traded.
+
+    `entry_filter` (e.g. the VF-1.0 volume filter, app/volume): a cross it returns False for opens
+    no trade; its exit of an open trade still counts, like the ET-1.0 trend filter.
 
     `as_of` is for the live paper engine: only bars that have closed by then count, a fill whose
     1-minute candle may still arrive is left pending (not skipped), and a trade that is still
@@ -261,6 +266,8 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
     all_crosses = B.crosses(signal_bars)
     days, why = no_trade_days(spot, start, end, cfg, holidays, as_of)
     blocked = T.blocked(spot, all_crosses) if cfg.trend_filter else frozenset()
+    if entry_filter is not None:
+        blocked = blocked | frozenset(c.bar_close for c in all_crosses if not entry_filter(c))
     by_day: dict[date, list[B.Cross]] = {}
     for c in all_crosses:
         by_day.setdefault(c.day, []).append(c)
@@ -292,7 +299,7 @@ def run(spot: pd.DataFrame, options: OptionData, start: date, end: date, cfg: Co
             elif not any(_entry_allowed(c, cfg) for c in crosses_today):
                 why[d] = "NO_CROSS_IN_WINDOW"
             elif not any(_entry_allowed(c, cfg, blocked) for c in crosses_today):
-                why[d] = "TREND_FILTER"
+                why[d] = "TREND_FILTER" if entry_filter is None else "ENTRY_FILTER"
             else:
                 why[d] = "ENTRIES_SKIPPED (no option data)"
     return Result(cfg, trades, skips, dict(sorted(why.items())), days)

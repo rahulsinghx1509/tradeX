@@ -42,10 +42,13 @@ class FakeGroww:
         for i in range(375):
             t = datetime.combine(day, time(9, 15)) + timedelta(minutes=i)
             p = spot_price(day, i)
-            if segment == "FNO":
+            vol = 1000
+            if segment == "FNO" and groww_symbol.endswith("FUT"):  # futures: price + volume
+                p, vol = p + 20, 1000 + 10 * (i % 7)
+            elif segment == "FNO":
                 strike, opt = L.parse_contract(groww_symbol)
                 p = max(0.0, (p - strike) if opt == "CE" else (strike - p)) + 80
-            rows.append([t.strftime("%Y-%m-%d %H:%M:%S"), p, p + 1, p - 1, p, 1000, None])
+            rows.append([t.strftime("%Y-%m-%d %H:%M:%S"), p, p + 1, p - 1, p, vol, None])
         return {"candles": rows}
 
     def get_expiries(self, exchange, underlying_symbol, year, month):
