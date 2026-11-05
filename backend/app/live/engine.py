@@ -4,9 +4,10 @@ Every minute during market hours:
 1. fetch today's closed NIFTY 1-minute candles and store them (shared with the ema-paper engine);
 2. NO TRADE if the newest candle is more than STALE_MINUTES old;
 3. run each strategy's own engine on today with as_of = now (same rules as its backtest);
-4. a new trade gets the next trade number and an ENTRY message with everything needed to act
-   on it (plus the signal bar's NIFTY futures volume vs its usual level, VF-1.0, info only); a
-   newly filled exit sends an EXIT message quoting the same trade number;
+4. a new trade gets the day's next trade number (YYYYMMDD-NN, e.g. 20261105-01) and an ENTRY
+   message with everything needed to act on it (plus the signal bar's NIFTY futures volume vs
+   its usual level, VF-1.0, info only); a newly filled exit sends an EXIT message quoting the
+   same trade number;
 5. after 15:05, one day report listing every trade by number.
 """
 
@@ -155,7 +156,7 @@ def entry_message(r: SignalTrade, volume: str | None = None) -> str:
                 f"{_hm(r.created_at)} (the service was not running then). The price now is "
                 "different: do not chase it."]
     return "\n".join(late + [
-        f"{PAPER} · Trade #{r.id} · ENTRY · {r.strategy} ({s.name if s else r.strategy})",
+        f"{PAPER} · Trade #{label(r)} · ENTRY · {r.strategy} ({s.name if s else r.strategy})",
         f"{_hm(r.entry_time)} IST · {arrow} NIFTY at {float(r.nifty_entry or 0):,.2f}",
         f"Action: {r.side} {_contract(r)}",
         f"Quantity: 1 lot = {r.lot_size}",
@@ -163,7 +164,7 @@ def entry_message(r: SignalTrade, volume: str | None = None) -> str:
         money,
         *([volume] if volume else []),
         r.exit_plan,
-        f"I'll send 'Trade #{r.id} EXIT' when it closes.",
+        f"I'll send 'Trade #{label(r)} EXIT' when it closes.",
         "Paper trade only. No order was placed."])
 
 
@@ -175,7 +176,7 @@ def exit_message(r: SignalTrade) -> str:
              if r.nifty_entry is not None and r.nifty_exit is not None else "")
     costs = float(r.slippage or 0) + float(r.charges or 0)
     return "\n".join([
-        f"{PAPER} · Trade #{r.id} · EXIT · {r.strategy}",
+        f"{PAPER} · Trade #{label(r)} · EXIT · {r.strategy}",
         f"{_hm(r.exit_time)} IST · reason: {why}",
         f"Action: {action} {_contract(r)} · 1 lot = {r.lot_size}",
         f"Price: ₹{float(r.entry_price):g} → ₹{float(r.exit_price):g} "
@@ -197,12 +198,12 @@ def summary_message(day: date, rows: list[SignalTrade], ema: list | None = None)
         lines += _total_lines(rows, ema or [])
         lines.append("Paper trades only. No order was placed.")
         return "\n".join(lines)
-    for r in sorted(rows, key=lambda x: x.id):
+    for r in sorted(rows, key=_order):
         out = (f"{_hm(r.exit_time)} {E.EXIT_LABELS.get(r.exit_reason, r.exit_reason)}"
                if r.exit_time is not None else "still OPEN")
         px = (f"₹{float(r.entry_price):g} → ₹{float(r.exit_price):g}" if r.exit_price is not None
               else f"₹{float(r.entry_price):g} → open")
-        lines.append(f"#{r.id} {r.strategy} · {r.side} {float(r.strike):g} {r.option_type} · "
+        lines.append(f"#{label(r)} {r.strategy} · {r.side} {float(r.strike):g} {r.option_type} · "
                      f"{_hm(r.entry_time)} → {out} · {px} · net {_rs(r.net_pnl)}")
     lines.append("")
     for code in STRATEGIES:
@@ -243,6 +244,28 @@ def _utc(t: datetime | None) -> datetime | None:
     return None if t is None else pd.Timestamp(t).tz_convert("UTC").to_pydatetime()
 
 
+def format_trade_no(day: date, n: int) -> str:
+    """Trade number shown everywhere: the IST trading day, then that day's count, 20261105-01."""
+    return f"{day:%Y%m%d}-{n:02d}"
+
+
+def next_trade_no(session: Session, day: date) -> str:
+    """The next number for `day`, counted across ALL strategies (NN restarts at 01 each day).
+    One `signals` process writes this table, so max + 1 is safe."""
+    nos = session.scalars(select(SignalTrade.trade_no).where(SignalTrade.trade_date == day))
+    used = [int(x.rsplit("-", 1)[1]) for x in nos if x and "-" in x]
+    return format_trade_no(day, max(used, default=0) + 1)
+
+
+def label(r: SignalTrade) -> str:
+    """The trade number for messages; the database id only if a row somehow has none."""
+    return r.trade_no or str(r.id)
+
+
+def _order(r: SignalTrade):
+    return (r.trade_no or "", r.id or 0)
+
+
 def _upsert(session: Session, code: str, t: E.Trade, plan: Callable[[], str], lot: int,
             now: datetime) -> tuple[str | None, SignalTrade]:
     row = session.scalar(select(SignalTrade).where(
@@ -256,8 +279,9 @@ def _upsert(session: Session, code: str, t: E.Trade, plan: Callable[[], str], lo
                           entry_time=_utc(t.entry_time), entry_price=t.entry_price,
                           entry_fill=t.entry_fill, nifty_entry=t.nifty_entry,
                           exit_plan=plan()[:300], status="OPEN", stale_exit=False, created_at=now)
+        row.trade_no = next_trade_no(session, t.day)
         session.add(row)
-        session.flush()  # assigns the trade number
+        session.flush()
         event = "entry"
     if t.exit_time is not None and row.status == "OPEN":
         row.exit_time, row.exit_price, row.exit_fill = _utc(t.exit_time), t.exit_price, t.exit_fill
@@ -349,9 +373,9 @@ def step(session: Session, client: Any, notifier: Any, strategies: tuple[str, ..
                               f"({s.reason} {s.detail}). NO TRADE.")
     session.commit()
     lookup = _volume_lookup(session, today) if entries else None
-    for r in sorted(entries, key=lambda x: x.id):
+    for r in sorted(entries, key=_order):
         notifier.send(entry_message(r, RV.note(lookup, r.signal_time)))
-    for r in sorted(exits, key=lambda x: (x.exit_time, x.id)):
+    for r in sorted(exits, key=lambda x: (x.exit_time, _order(x))):
         notifier.send(exit_message(r))
     return f"ok at {as_of:%H:%M}: {len(entries)} entries, {len(exits)} exits, {open_now} open"
 

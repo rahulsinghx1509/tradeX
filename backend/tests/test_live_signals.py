@@ -39,7 +39,9 @@ def test_live_day_matches_each_backtest_and_numbers_every_trade(session):
     rows = _rows(session)
     assert {r.strategy for r in rows} == set(LE.STRATEGIES)
     assert all(r.status == "CLOSED" and r.mode == MODE and r.lot_size == 65 for r in rows)
-    assert [r.id for r in rows] == list(range(rows[0].id, rows[0].id + len(rows)))
+    # RK 2026-11-05: numbers are YYYYMMDD-NN, NN counting from 01 across all strategies today
+    day = f"{DAY:%Y%m%d}"
+    assert sorted(r.trade_no for r in rows) == [f"{day}-{n:02d}" for n in range(1, len(rows) + 1)]
     assert sum(1 for r in rows if r.strategy == "ORB-1.0") == 1  # one breakout a day
 
     # Each strategy's live trades equal its plain backtest on the completed day.
@@ -60,8 +62,8 @@ def test_entry_and_exit_messages_quote_the_same_trade_number(session):
     _run_day(session, g, notes)
     rows = _rows(session)
     for r in rows:
-        entry = [m for m in notes.sent if f"Trade #{r.id} · ENTRY" in m]
-        exit_ = [m for m in notes.sent if f"Trade #{r.id} · EXIT" in m]
+        entry = [m for m in notes.sent if f"Trade #{r.trade_no} · ENTRY" in m]
+        exit_ = [m for m in notes.sent if f"Trade #{r.trade_no} · EXIT" in m]
         assert len(entry) == 1 and len(exit_) == 1
         assert r.strategy in entry[0] and "Action: BUY NIFTY" in entry[0]
         assert "1 lot = 65" in entry[0] and "Exit at the first of" in entry[0]
@@ -71,7 +73,7 @@ def test_entry_and_exit_messages_quote_the_same_trade_number(session):
     orb = next(r for r in rows if r.strategy == "ORB-1.0")
     assert "09:15-09:29 range" in orb.exit_plan
     report = [m for m in notes.sent if "Day report" in m]
-    assert len(report) == 1 and all(f"#{r.id} {r.strategy}" in report[0] for r in rows)
+    assert len(report) == 1 and all(f"#{r.trade_no} {r.strategy}" in report[0] for r in rows)
     assert len(notes.photos) == 1 and notes.photos[0].startswith(b"\x89PNG")  # ONE picture too
 
 
@@ -154,12 +156,14 @@ def test_one_day_report_covers_every_strategy_and_the_ema_paper_engine(session):
     common = dict(trade_date=t0.date(), signal_time=t0, direction=-1, strike=23700,
                   expiry_date=t0.date(), groww_symbol="x", entry_time=t0, nifty_entry=23678.0,
                   stale_exit=False, created_at=t0)
-    sig = [SignalTrade(id=1, strategy="ORB-1.0", mode=MODE, side="BUY", option_type="CE", lot_size=65,
+    sig = [SignalTrade(id=1, trade_no="20261103-01", strategy="ORB-1.0", mode=MODE,
+                       side="BUY", option_type="CE", lot_size=65,
                        entry_price=175.25, entry_fill=176.1, exit_plan="x", exit_time=t0,
                        exit_price=180, exit_fill=179.1, exit_reason="SQUARE_OFF", gross_pnl=310,
                        slippage=100, charges=60, net_pnl=150, status="CLOSED",
                        **{**common, "direction": 1, "strike": 23650}),
-           SignalTrade(id=2, strategy="EMA-921", mode=MODE, side="BUY", option_type="PE", lot_size=65,
+           SignalTrade(id=2, trade_no="20261103-02", strategy="EMA-921", mode=MODE,
+                       side="BUY", option_type="PE", lot_size=65,
                        entry_price=195.5, entry_fill=196.5, exit_plan="x", status="OPEN", **common)]
     ema = [PaperTrade(timeframe=5, cross_number=1, mode=m, side=side, option_type=ot, entry_price=1,
                       entry_fill=1, exit_price=1, exit_fill=1, exit_time=t0, exit_reason="OPPOSITE_CROSS",
@@ -167,7 +171,7 @@ def test_one_day_report_covers_every_strategy_and_the_ema_paper_engine(session):
            for m, side, ot, net in (("ITM_BUY", "BUY", "PE", -1699), ("ATM_BUY", "BUY", "PE", -960),
                                     ("ATM_SELL", "SELL", "CE", -1334))]
     msg = LE.summary_message(t0.date(), sig, ema)
-    assert "#1 ORB-1.0" in msg and "#2 EMA-921" in msg and "still OPEN" in msg
+    assert "#20261103-01 ORB-1.0" in msg and "#20261103-02 EMA-921" in msg and "still OPEN" in msg
     assert "9/21 EMA paper engine net: -₹3,993" in msg
     # RK 2026-11-03: the headline adds up EVERY alerted trade: 150 + (-3,993); #2 is still open
     assert "TOTAL net today, every alerted trade (4 closed): -₹3,843 (1 still open, not counted)" in msg
@@ -175,3 +179,22 @@ def test_one_day_report_covers_every_strategy_and_the_ema_paper_engine(session):
     for s_rows, e_rows in ((sig, ema), (sig, []), ([], ema), ([], [])):
         png = render_png(t0.date(), s_rows, e_rows)
         assert png.startswith(b"\x89PNG") and len(png) > 1000
+
+
+def test_trade_numbers_restart_each_day_and_count_across_strategies(session):
+    from datetime import date
+
+    t0 = datetime(2026, 11, 4, 4, 0, tzinfo=UTC)
+    d1, d2 = date(2026, 11, 4), date(2026, 11, 5)
+    assert LE.next_trade_no(session, d1) == "20261104-01"
+    for i, (code, day) in enumerate((("ORB-1.0", d1), ("EMA-921", d1), ("ET-1.0", d2))):
+        session.add(SignalTrade(trade_no=LE.next_trade_no(session, day), strategy=code,
+                                trade_date=day, mode=MODE, signal_time=t0 + timedelta(minutes=i),
+                                direction=1, side="BUY", option_type="CE", strike=23700,
+                                expiry_date=day, groww_symbol="x", lot_size=65, entry_time=t0,
+                                entry_price=100, entry_fill=101, exit_plan="x", status="OPEN",
+                                stale_exit=False, created_at=t0))
+        session.flush()
+    assert [r.trade_no for r in _rows(session)] == ["20261104-01", "20261104-02", "20261105-01"]
+    assert LE.next_trade_no(session, d1) == "20261104-03"
+    assert LE.format_trade_no(d2, 123) == "20261105-123"
