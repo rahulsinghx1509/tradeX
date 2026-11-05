@@ -254,9 +254,9 @@ def test_day_and_week_limits_stop_new_entries():
     ps = [_pos(d1, -1500.0), _pos(d1, -800.0), _pos(d1, 300.0),  # 3rd skipped: day loss 2,300
           _pos(d2, -2500.0), _pos(d2, 100.0),                     # 2nd skipped: day loss 2,500
           _pos(d3, 700.0)]                                         # week loss 4,800 < 5,000: taken
-    kept, skipped = RK.apply_day_week(ps, RK.Level("t", None, 2000, 5000))
+    kept, skipped = RK.apply_day_week(ps, RK.Level("t", None, None, 2000, 5000, None))
     assert [p.net_pnl for p in kept] == [-1500.0, -800.0, -2500.0, 700.0] and skipped == 2
-    kept, skipped = RK.apply_day_week(ps, RK.Level("t", None, 2000, 4000))
+    kept, skipped = RK.apply_day_week(ps, RK.Level("t", None, None, 2000, 4000, None))
     assert [p.net_pnl for p in kept] == [-1500.0, -800.0, -2500.0] and skipped == 3
     assert RK.worst_period(ps, weekly=False) == -2400.0 and RK.over(ps, 1000) == 2
 
@@ -266,3 +266,46 @@ def test_tp_custom_per_trade_limit():
     lim = TP.Limits(per_trade=1000, day=2000, week=5000)  # 1-ITM risk ₹566 now fits
     res = TP.run(spot, fut_from(spot), FakeOptions(spot), DAY, DAY, limits=lim, holidays=HOL)
     assert len(res.trades["ITM1_BUY"]) == 1
+
+
+def test_day_profit_lock():
+    from app.spreads import risk as RK
+
+    d = date(2026, 10, 12)
+    ps = [_pos(d, 3000.0), _pos(d, 1500.0), _pos(d, -900.0)]  # 3rd skipped: day up 4,500
+    kept, skipped = RK.apply_day_week(ps, RK.Level("t", None, None, 2000, 5000, 4000))
+    assert len(kept) == 2 and skipped == 1
+
+
+def _sell_trade(path):
+    """An ATM sell at 10:00 on DAY held to 15:00, with option price path(i) (i = minute)."""
+    rows = []
+    for i in range(375):
+        t = pd.Timestamp(f"{DAY} 09:15", tz=IST) + pd.Timedelta(minutes=i)
+        p = path(i)
+        rows.append({"time": t.tz_convert("UTC"), "open": p, "high": p + 1, "low": p - 1, "close": p})
+    m = EE._Minutes(pd.DataFrame(rows))
+    entry = pd.Timestamp(f"{DAY} 10:00", tz=IST)
+    tr = EE.Trade("ATM_SELL", DAY, 1, "SELL", "PE", 24500, EXPIRY, 7, "S", 1, entry.to_pydatetime(),
+                  entry.to_pydatetime(), path(45), path(45), 24500)
+    tr.exit_time = pd.Timestamp(f"{DAY} 15:00", tz=IST).to_pydatetime()
+    return tr, m
+
+
+def test_premium_stop_and_target_on_a_sell():
+    from app.spreads import risk as RK
+
+    cfg = replace(CFG, slippage_pct=0, slippage_points=0)
+    # stop ₹1,300 = 20 points above 100; target ₹1,950 = 30 points below
+    up = lambda i: 100.0 + max(0, i - 45)  # noqa: E731
+    tr, m = _sell_trade(up)
+    out = RK.stop_target(tr, m, 1300, 1950, cfg)
+    assert out.exit_reason == "STOP" and out.exit_price == 120
+    assert out.gross_pnl == pytest.approx(-1300) and tr.exit_reason is None  # original untouched
+    down = lambda i: 100.0 - max(0, i - 45)  # noqa: E731
+    tr, m = _sell_trade(down)
+    out = RK.stop_target(tr, m, 1300, 1950, cfg)
+    assert out.exit_reason == "TARGET" and out.exit_price == 70 and out.gross_pnl == pytest.approx(1950)
+    flat_px = lambda i: 100.0  # noqa: E731
+    tr, m = _sell_trade(flat_px)
+    assert RK.stop_target(tr, m, 1300, 1950, cfg) is tr  # neither hit: unchanged

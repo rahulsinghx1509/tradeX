@@ -1,4 +1,4 @@
-"""RL-1.0: loss limits for a ₹1 lakh account, on the ET ATM sell and TP-1.0 trades
+"""RL-1.0: loss and profit limits for a ₹1 lakh account, on the ET ATM sell and TP-1.0 trades
 (rules and levels in backend/app/spreads/risk.py, fixed before the run; docs/01 §26).
 
 A study: no PASS verdicts, the held-back year is not used. Needs the data from `spread-load`.
@@ -31,7 +31,8 @@ def line(name, level, ps, skipped, capital, start):
     return (f"| {name} | {level.name} | {s.trades} | {skipped} | {rs(s.net_pnl)} | "
             f"{nv(s.profit_factor)} | {rs(s.year1)} | {rs(s.year2)} | {nv(s.max_drawdown_pct)}% | "
             f"{rs(s.worst_trade)} | {rs(RK.worst_period(ps, False))} | "
-            f"{rs(RK.worst_period(ps, True))} | {RK.over(ps, 1000)} / {RK.over(ps, 2000)} |")
+            f"{rs(RK.worst_period(ps, True))} | {RK.over(ps, 1000)} / {RK.over(ps, 2000)} | "
+            f"{RK.exits(ps)} |")
 
 
 def main() -> int:
@@ -50,30 +51,46 @@ def main() -> int:
         E.set_expiry_days(opts.expiries())
         print("ET ATM sell...")
         et = EE.run(spot, opts, start, end, E.et_config(base), (E.CS_SHORT,))
-        et_ps = E.single("ET ATM sell", et.trades[E.CS_SHORT])
+        et_trades = [t for t in et.trades[E.CS_SHORT] if t.exit_time is not None]
+        cache: dict = {}
+
+        def mins(t):
+            if (t.symbol, t.day) not in cache:
+                cache[(t.symbol, t.day)] = EE._Minutes(opts.minutes(t.symbol, t.day))
+            return cache[(t.symbol, t.day)]
+
         rows = []
-        for name, ps in (("ET ATM sell, all days", et_ps),
-                         ("ET ATM sell, no expiry days (info)", [x for x in et_ps if not x.expiry_day])):
-            for lv in RK.LEVELS:
-                kept, skipped = RK.apply_day_week(ps, lv)
-                rows.append(line(name, lv, kept, skipped, base.capital, start))
+        for lv in RK.LEVELS:
+            trades = et_trades if lv.stop is None else [
+                RK.stop_target(t, mins(t), lv.stop, lv.target, base) for t in et_trades]
+            ps = E.single("ET ATM sell", trades)
+            for name, sub in (("ET ATM sell, all days", ps),
+                              ("ET ATM sell, no expiry days (info)",
+                               [x for x in ps if not x.expiry_day])):
+                kept, skipped = RK.apply_day_week(sub, lv)
+                rows.append((name, line(name, lv, kept, skipped, base.capital, start)))
+        rows.sort(key=lambda r: r[0])  # all-days rows first, then the info rows
+        rows = [r for _, r in rows]
         for mode in TP.MODES:
             for lv in RK.LEVELS:
                 print(f"TP-1.0 {mode} {lv.name}...")
-                lim = False if lv.per_trade is None else TP.Limits(lv.per_trade, lv.day, lv.week)
-                res = TP.run(spot, fut, opts, start, end, base, (mode,), lim)
-                ps = E.single("TP", res.trades[mode])
-                skipped = sum(1 for s in res.skips if s.reason in ("RISK_TOO_BIG", "LOSS_LIMIT"))
+                # per-trade cap and R target in the engine; day/week limits afterwards (risk.py)
+                lim = False if lv.stop is None else TP.Limits(lv.stop, None, None)
+                res = TP.run(spot, fut, opts, start, end, base, (mode,), lim,
+                             target_r=lv.reward or TP.TARGET_R)
+                ps, skipped = RK.apply_day_week(E.single("TP", res.trades[mode]), lv)
+                skipped += sum(1 for s in res.skips if s.reason == "RISK_TOO_BIG")
                 rows.append(line(f"TP-1.0 {mode.replace('_', ' ')}", lv, ps, skipped, base.capital,
                                  start))
-    head = ["# RL-1.0: loss limits for a ₹1 lakh account", "",
+    head = ["# RL-1.0: loss and profit limits for a ₹1 lakh account", "",
             f"Range {start} to {end} (development years only). Levels fixed before the run "
             "(backend/app/spreads/risk.py). Study only: no PASS verdicts, held-back year unused.", "",
-            "Day / week limits stop NEW entries once the day's or week's realised net loss reaches "
-            "the limit. The per-trade limit applies to TP-1.0 only (ET ATM sell has no stop).", "",
+            "Levels: stop a trade / target (R) / day loss / day profit lock / week loss. ET ATM sell: "
+            "stop and target on the option premium. TP-1.0: stop = largest allowed 1-lot risk, "
+            "target = R x its index stop. Day/week limits stop NEW entries only.", "",
             "| Strategy | Limits | Trades | Skipped | Net | PF | Year 1 | Year 2 | Max DD | "
-            "Worst trade | Worst day | Worst week | Trades losing > ₹1k / > ₹2k |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+            "Worst trade | Worst day | Worst week | Trades losing > ₹1k / > ₹2k | Exits |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     md = "\n".join(head + rows) + "\n"
     out = Path(REPO_ROOT) / "reports"
     out.mkdir(exist_ok=True)

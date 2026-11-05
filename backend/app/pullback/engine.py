@@ -133,11 +133,12 @@ class _SpotMinutes:
         self.by_day = {k: g.reset_index(drop=True) for k, g in d.groupby(d["t"].dt.date)}
 
 
-def _exit_for(sig: Signal, day_min: pd.DataFrame, day_bars: list, sq: pd.Timestamp):
+def _exit_for(sig: Signal, day_min: pd.DataFrame, day_bars: list, sq: pd.Timestamp,
+              target_r: float = TARGET_R):
     """(exit time, reason, nifty) for a trade entered on `sig`, from 1m closes and 5m bars."""
     long = sig.cross.direction > 0
     entry, r = sig.cross.spot, sig.risk_points
-    target = entry + TARGET_R * r if long else entry - TARGET_R * r
+    target = entry + target_r * r if long else entry - target_r * r
     stall_lvl = entry + STALL_R * r if long else entry - STALL_R * r
     t0 = sig.cross.bar_close
     stall_t = t0 + timedelta(minutes=STALL_MINUTES)
@@ -171,7 +172,7 @@ def _exit_for(sig: Signal, day_min: pd.DataFrame, day_bars: list, sq: pd.Timesta
 
 def run(spot: pd.DataFrame, fut: pd.DataFrame, options: EE.OptionData, start: date, end: date,
         base: EE.Config | None = None, modes=MODES, limits: bool | Limits = False,
-        holidays: frozenset[date] | None = None) -> EE.Result:
+        holidays: frozenset[date] | None = None, target_r: float = TARGET_R) -> EE.Result:
     cfg = config(base)
     limits = PLAN_LIMITS if limits is True else (limits or None)
     bars = B.add_atr(B.add_emas(B.resample(spot, 5)))
@@ -204,7 +205,7 @@ def run(spot: pd.DataFrame, fut: pd.DataFrame, options: EE.OptionData, start: da
         made = 0
         for mode in modes:
             made += _run_day(mode, d, by_day.get(d, []), rng, fb, spot_min.get(d), sq, cfg,
-                             options, expiries, minutes, skips, trades[mode], limits)
+                             options, expiries, minutes, skips, trades[mode], limits, target_r)
         if not made:
             why.setdefault(d, "NO_SETUP")
     return EE.Result(cfg, trades, skips, dict(sorted(why.items())), days)
@@ -216,7 +217,7 @@ def _week_loss(done: list[EE.Trade], d: date) -> float:
 
 
 def _run_day(mode, d, day_bars, rng, fb, day_min, sq, cfg, options, expiries, minutes, skips,
-             done: list[EE.Trade], limits: Limits | None) -> int:
+             done: list[EE.Trade], limits: Limits | None, target_r: float = TARGET_R) -> int:
     armed: dict[int, pd.Timestamp | None] = {1: None, -1: None}  # bar that armed the side
     pull: dict[int, float | None] = {1: None, -1: None}  # extreme since the pullback started
     busy_until: pd.Timestamp | None = None
@@ -266,7 +267,7 @@ def _run_day(mode, d, day_bars, rng, fb, day_min, sq, cfg, options, expiries, mi
                     tr = EE._open(mode, d, sig.cross, options, expiries, cfg, minutes, skips)
                     if tr is None:
                         continue
-                    at, reason, nifty = _exit_for(sig, day_min, day_bars, sq)
+                    at, reason, nifty = _exit_for(sig, day_min, day_bars, sq, target_r)
                     EE._close(tr, at, reason, nifty, cfg, minutes, {})
                     done.append(tr)
                     busy_until = at
