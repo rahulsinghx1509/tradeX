@@ -474,6 +474,12 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   trading day, then that day's count from 01 across ALL strategies. Used in entry/exit alerts and
   the day report (text + picture). Migration 0009 numbered past trades the same way (per day, in
   the order they were recorded).
+- 2026-11-06 RK: alerts arrived late. Cause: the fill is the 1-minute OPEN of the signal minute,
+  but the engine waited for that option candle to CLOSE (+1 min), looked only once a minute at
+  :05 (a candle Groww published a few seconds late cost another minute). Fix: the open is used
+  as soon as the candle has started (same price, so live = backtest still holds); a missing
+  just-closed NIFTY candle is looked for again up to 4 times, 4 s apart; on 5-minute closes the
+  service looks at :05, :20 and :35; the log says how many seconds each alert took.
 
 ## 24. Intraday stocks: NIFTY 50 + NIFTY Next 50 (2026-11-03)
 
