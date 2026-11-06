@@ -1,9 +1,12 @@
 """One minute of the multi-strategy PAPER engine, plus its Telegram messages.
 
-Every minute during market hours:
+Every minute during market hours (5 s past the minute, and again at :20 and :35 on 5-minute
+closes, see seconds_to_next_look):
 1. fetch today's closed NIFTY 1-minute candles and store them (shared with the ema-paper engine);
+   if only the just-closed candle is missing, look again a few seconds later (_fetch_spot);
 2. NO TRADE if the newest candle is more than STALE_MINUTES old;
-3. run each strategy's own engine on today with as_of = now (same rules as its backtest);
+3. run each strategy's own engine on today with as_of = now (same rules as its backtest); the
+   option fill is the fill minute's 1-minute open, read as soon as that candle has started;
 4. a new trade gets the day's next trade number (YYYYMMDD-NN, e.g. 20261105-01) and an ENTRY
    message with everything needed to act on it (plus the signal bar's NIFTY futures volume vs
    its usual level, VF-1.0, info only); a newly filled exit sends an EXIT message quoting the
@@ -14,6 +17,7 @@ Every minute during market hours:
 from __future__ import annotations
 
 import logging
+import time as _time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
@@ -38,6 +42,15 @@ from app.volume import rvol as RV
 log = logging.getLogger(__name__)
 
 STALE_MINUTES = 3
+# Groww can publish the just-closed NIFTY candle a few seconds after the minute. Rather than
+# waiting a whole minute for it (RK 2026-11-06: alerts were late), look again a few times.
+SPOT_RETRIES = 4
+SPOT_RETRY_SECONDS = 4
+# Seconds past the minute at which the service looks. Every signal and exit is decided on a
+# 5-minute close, so on those minutes it looks three times: an option candle Groww hasn't
+# published at :05 is picked up at :20 or :35 instead of a minute later.
+LOOKS_EVERY_MINUTE = (5,)
+LOOKS_ON_5MIN_CLOSE = (5, 20, 35)
 FIRST_RUN = time(9, 16)
 SUMMARY_AT = time(15, 5)
 PAPER = "🧪 PAPER"
@@ -294,7 +307,7 @@ def _upsert(session: Session, code: str, t: E.Trade, plan: Callable[[], str], lo
 
 
 def step(session: Session, client: Any, notifier: Any, strategies: tuple[str, ...], mode: str,
-         state: LiveState, now: datetime) -> str:
+         state: LiveState, now: datetime, sleep: Callable[[float], None] = _time.sleep) -> str:
     """One minute of the engine. Returns a short status for the log."""
     ist = now.astimezone(IST)
     today = ist.date()
@@ -321,15 +334,12 @@ def step(session: Session, client: Any, notifier: Any, strategies: tuple[str, ..
             return "day report sent"
         return "closed for the day"
 
+    started = _time.monotonic()
     as_of = pd.Timestamp(ist.replace(second=0, microsecond=0))
     if not state.warmed_up:  # the EMAs need the last few days of NIFTY
         L.load_spot(session, client, today, today - timedelta(days=1), L.LoadReport(), log=log.info)
         state.warmed_up = True
-    try:
-        spot_today = closed_only(L.fetch_day(client, S.SPOT_SYMBOL, "CASH", today), as_of)
-    except Exception as exc:
-        spot_today = []
-        log.warning("spot candles failed: %s", exc)
+    spot_today = _fetch_spot(client, today, as_of, sleep)
     if spot_today:
         S.save_minutes(session, S.SPOT_SYMBOL, today, spot_today)
         session.commit()
@@ -347,6 +357,7 @@ def step(session: Session, client: Any, notifier: Any, strategies: tuple[str, ..
     if state.options is None:
         state.options = LiveOptions(session, client, today)
     state.options.as_of = as_of
+    state.options.new_round()  # a second look in the same minute fetches fresh option candles
     _futures_minute(session, client, state, today, as_of)
     spot = S.load_spot(session, today, today, L.WARMUP_CALENDAR_DAYS)
     lot = S.UNDERLYINGS[S.UNDERLYING][0]
@@ -375,9 +386,62 @@ def step(session: Session, client: Any, notifier: Any, strategies: tuple[str, ..
     lookup = _volume_lookup(session, today) if entries else None
     for r in sorted(entries, key=_order):
         notifier.send(entry_message(r, RV.note(lookup, r.signal_time)))
+        log.info("Trade #%s ENTRY alert sent %s after its signal (%s IST)", label(r),
+                 _delay(r.signal_time, now, started), _hm(r.signal_time))
     for r in sorted(exits, key=lambda x: (x.exit_time, _order(x))):
         notifier.send(exit_message(r))
-    return f"ok at {as_of:%H:%M}: {len(entries)} entries, {len(exits)} exits, {open_now} open"
+        log.info("Trade #%s EXIT alert sent %s after its exit minute (%s IST)", label(r),
+                 _delay(r.exit_time, now, started), _hm(r.exit_time))
+    took = _time.monotonic() - started
+    return (f"ok at {as_of:%H:%M}: {len(entries)} entries, {len(exits)} exits, {open_now} open "
+            f"({took:.1f}s)")
+
+
+def _delay(event_time, now: datetime, started: float) -> str:
+    """How long after the signal/exit minute the message went out, for the log."""
+    ts = pd.Timestamp(event_time)
+    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts
+    secs = (pd.Timestamp(now) - ts).total_seconds() + (_time.monotonic() - started)
+    return f"{secs:.0f}s"
+
+
+def _fetch_spot(client: Any, today: date, as_of: pd.Timestamp,
+                sleep: Callable[[float], None]) -> list:
+    """Today's closed NIFTY 1-minute candles. If only the candle that just closed is missing,
+    Groww is a few seconds behind: look again up to SPOT_RETRIES times before going on.
+    Real gaps (stale data) are not waited for; the caller says NO TRADE."""
+    want = as_of.tz_convert("UTC").to_pydatetime() - timedelta(minutes=1)  # the just-closed minute
+    candles: list = []
+    for attempt in range(SPOT_RETRIES + 1):
+        try:
+            candles = closed_only(L.fetch_day(client, S.SPOT_SYMBOL, "CASH", today), as_of)
+        except Exception as exc:
+            log.warning("spot candles failed: %s", exc)
+        last = candles[-1].time if candles else None
+        if last is not None and last >= want:
+            if attempt:
+                log.info("NIFTY %s candle arrived after %d extra look(s)", _hm(want), attempt)
+            return candles
+        if last is None or last < want - timedelta(minutes=2) or attempt == SPOT_RETRIES:
+            break  # stale, or still missing after the retries: decide with what we have
+        sleep(SPOT_RETRY_SECONDS)
+    if candles and candles[-1].time < want:
+        log.warning("NIFTY %s candle not published by Groww yet; going on with %s",
+                    _hm(want), _hm(candles[-1].time))
+    return candles
+
+
+def seconds_to_next_look(epoch: float) -> float:
+    """Seconds to sleep until the next look (see LOOKS_EVERY_MINUTE / LOOKS_ON_5MIN_CLOSE).
+    IST is UTC+5:30, so a 5-minute close in IST is one in UTC too."""
+    minute, sec = divmod(epoch, 60)
+    looks = LOOKS_ON_5MIN_CLOSE if int(minute) % 5 == 0 else LOOKS_EVERY_MINUTE
+    later = [x for x in looks if x > sec + 0.5]
+    if later:
+        return later[0] - sec
+    nxt = int(minute) + 1
+    first = (LOOKS_ON_5MIN_CLOSE if nxt % 5 == 0 else LOOKS_EVERY_MINUTE)[0]
+    return 60 - sec + first
 
 
 def _futures_minute(session: Session, client: Any, state: LiveState, today: date,
