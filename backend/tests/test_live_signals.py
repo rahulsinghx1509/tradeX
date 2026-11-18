@@ -83,8 +83,8 @@ def test_open_trades_are_not_closed_early_and_minutes_repeat_safely(session):
     state = _run_day(session, g, notes, step_minutes=1, until=(11, 0))
     rows = _rows(session)
     assert rows and any(r.status == "OPEN" for r in rows)
-    for r in rows:  # never announced before its fill minute has closed
-        assert r.created_at.replace(tzinfo=UTC) >= r.entry_time.replace(tzinfo=UTC) + timedelta(minutes=1)
+    for r in rows:  # never announced before its fill minute has started (its open is known then)
+        assert r.created_at.replace(tzinfo=UTC) >= r.entry_time.replace(tzinfo=UTC)
     before = len(notes.sent)
     g.clock = _at(11, 0).astimezone(IST)
     LE.step(session, g, notes, tuple(LE.STRATEGIES), MODE, state, _at(11, 0))
@@ -198,3 +198,70 @@ def test_trade_numbers_restart_each_day_and_count_across_strategies(session):
     assert [r.trade_no for r in _rows(session)] == ["20261104-01", "20261104-02", "20261105-01"]
     assert LE.next_trade_no(session, d1) == "20261104-03"
     assert LE.format_trade_no(d2, 123) == "20261105-123"
+
+
+def test_alerts_go_out_in_the_signal_minute_not_a_minute_later(session):
+    """RK 2026-11-06: alerts were late. The fill is the 1-minute OPEN of the minute the signal
+    bar closes, which is known as soon as that candle starts: no waiting for it to close."""
+    _history(session)
+    g, notes = ClockGroww(), Notes()
+    _run_day(session, g, notes, step_minutes=1, until=(15, 6))
+    rows = _rows(session)
+    assert rows
+    for r in rows:
+        signal = r.signal_time.replace(tzinfo=UTC)
+        assert r.entry_time.replace(tzinfo=UTC) == signal  # filled at the signal minute's open
+        assert r.created_at.replace(tzinfo=UTC) - signal < timedelta(minutes=1)
+        assert r.closed_at.replace(tzinfo=UTC) - r.exit_time.replace(tzinfo=UTC) < timedelta(minutes=1)
+    assert not any("LATE" in m for m in notes.sent)
+
+
+class LateSpotGroww(ClockGroww):
+    """Groww publishing the just-closed NIFTY candle only on the n-th request of a minute."""
+
+    def __init__(self, late_calls=2, **kw):
+        super().__init__(**kw)
+        self.late_calls, self.spot_calls = late_calls, 0
+
+    def get_historical_candles(self, **kw):
+        body = super().get_historical_candles(**kw)
+        if kw["segment"] == "CASH" and self.clock is not None and kw["start_time"].startswith(
+                f"{self.clock:%Y-%m-%d}"):
+            self.spot_calls += 1
+            if self.spot_calls <= self.late_calls:
+                just_closed = self.clock.replace(second=0, tzinfo=None) - timedelta(minutes=1)
+                body = {"candles": [r for r in body["candles"]
+                                    if datetime.fromisoformat(r[0]) < just_closed]}
+        return body
+
+
+def test_a_few_seconds_late_nifty_candle_is_waited_for_not_a_minute(session):
+    _history(session)
+    g, notes, waits = LateSpotGroww(late_calls=2), Notes(), []
+    g.clock = _at(10, 30).astimezone(IST)
+    out = LE.step(session, g, notes, tuple(LE.STRATEGIES), MODE, LE.LiveState(), _at(10, 30),
+                  sleep=waits.append)
+    assert out.startswith("ok at 10:30")
+    assert waits == [LE.SPOT_RETRY_SECONDS] * 2  # looked twice more, a few seconds apart
+    newest = max(S.load_minutes(session, S.SPOT_SYMBOL, DAY, DAY)["time"])
+    assert newest.tz_convert(IST).strftime("%H:%M") == "10:29"
+
+
+def test_stale_data_is_not_waited_for(session):
+    _history(session)
+    g, notes, waits = ClockGroww(), Notes(), []
+    g.stop_spot_at = _at(10, 0).astimezone(IST)
+    g.clock = _at(10, 30).astimezone(IST)
+    out = LE.step(session, g, notes, tuple(LE.STRATEGIES), MODE, LE.LiveState(), _at(10, 30),
+                  sleep=waits.append)
+    assert out.startswith("NO TRADE") and waits == []
+
+
+def test_looks_three_times_on_five_minute_closes():
+    base = datetime(2026, 11, 6, 4, 35, tzinfo=UTC).timestamp()  # 10:05 IST, a 5-minute close
+    assert LE.seconds_to_next_look(base + 0) == 5
+    assert LE.seconds_to_next_look(base + 6) == 14     # -> 10:05:20
+    assert LE.seconds_to_next_look(base + 21) == 14    # -> 10:05:35
+    assert LE.seconds_to_next_look(base + 36) == 29    # -> 10:06:05
+    assert LE.seconds_to_next_look(base + 66) == 59    # 10:06 is not a close -> 10:07:05
+    assert LE.seconds_to_next_look(base + 4 * 60 + 6) == 59  # 10:09:06 -> 10:10:05

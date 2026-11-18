@@ -67,8 +67,9 @@ def main() -> int:
             log.exception("signal step crashed; will retry next minute")
         if a.once:
             return 0
-        now = _time.time()  # wake 5 seconds after each minute, when the last candle has closed
-        _time.sleep(60 - (now % 60) + 5)
+        # 5 seconds after each minute, and also at :20 and :35 on 5-minute closes, when the
+        # signals and exits are decided (a second look catches a candle Groww sent late).
+        _time.sleep(LE.seconds_to_next_look(_time.time()))
 
 
 if __name__ == "__main__":

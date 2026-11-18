@@ -106,10 +106,10 @@ def test_open_trade_stays_open_until_its_exit_is_known(session):
     assert rows
     open_rows = [r for r in rows if r.status == "OPEN"]
     assert open_rows and all(r.exit_time is None for r in open_rows)
-    # No entry is ever announced before its fill minute has closed.
+    # No entry is ever announced before its fill minute has started (its 1-minute open is
+    # known from then on; RK 2026-11-06, alerts no longer wait for that candle to close).
     for r in rows:
-        assert r.created_at.replace(tzinfo=UTC) >= (r.entry_time.replace(tzinfo=UTC)
-                                                    + timedelta(minutes=1))
+        assert r.created_at.replace(tzinfo=UTC) >= r.entry_time.replace(tzinfo=UTC)
 
 
 def test_running_the_same_minute_twice_sends_nothing_new(session):

@@ -47,6 +47,19 @@ def closed_only(candles: list, as_of: pd.Timestamp) -> list:
     return [c for c in candles if c.time <= cut]
 
 
+def started_by(candles: list, as_of: pd.Timestamp) -> list:
+    """Option candles that have STARTED by as_of, the forming one included.
+
+    Fills use a candle's 1-minute OPEN, and the open never changes once the candle exists, so
+    an entry at 10:05 can be priced at 10:05:05 instead of waiting for the 10:05 candle to
+    close at 10:06 (that wait made every alert at least a minute late, RK 2026-11-06).
+    Fills, stale exits and MAE only read the high/low/close of candles that started before the
+    fill minute, which have closed; the forming candle's row is overwritten on the next fetch.
+    """
+    cut = as_of.tz_convert("UTC").to_pydatetime()
+    return [c for c in candles if c.time <= cut]
+
+
 class LiveOptions:
     """OptionData for today: expiries and contracts from the DB (fetched from Groww when
     missing), option candles fetched live and stored."""
@@ -54,11 +67,16 @@ class LiveOptions:
     def __init__(self, session: Session, client: Any, today: date):
         self.session, self.client, self.today = session, client, today
         self._fetched_contracts: set[date] = set()
-        self._minutes: dict[tuple[str, date], tuple[pd.Timestamp, pd.DataFrame | None]] = {}
+        self._minutes: dict[tuple[str, date], tuple[tuple, pd.DataFrame | None]] = {}
         self.as_of: pd.Timestamp | None = None
+        self._round = 0  # new_round() makes a second look within the same minute fetch again
         rep = L.LoadReport()
         L.load_expiries(self.session, client, today, today, rep, log=log.info)
         self._data = S.DbOptionData(session)
+
+    def new_round(self) -> None:
+        """Fetch option candles again even if this minute was already looked at."""
+        self._round += 1
 
     def expiries(self) -> list[date]:
         return self._data.expiries()
@@ -82,10 +100,11 @@ class LiveOptions:
             return self._data.minutes(symbol, day)
         key = (symbol, day)
         hit = self._minutes.get(key)
-        if hit and self.as_of is not None and hit[0] == self.as_of:
+        stamp = (self.as_of, self._round)
+        if hit and self.as_of is not None and hit[0] == stamp:
             return hit[1]
         try:
-            candles = closed_only(L.fetch_day(self.client, symbol, "FNO", day), self.as_of)
+            candles = started_by(L.fetch_day(self.client, symbol, "FNO", day), self.as_of)
         except Exception as exc:  # no price is "no data", never zero
             log.warning("option candles for %s failed: %s", symbol, exc)
             return hit[1] if hit else None
@@ -93,7 +112,7 @@ class LiveOptions:
         self.session.commit()
         df = S.load_minutes(self.session, symbol, day, day)
         df = None if df.empty else df
-        self._minutes[key] = (self.as_of, df)
+        self._minutes[key] = (stamp, df)
         return df
 
 
