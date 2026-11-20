@@ -53,6 +53,8 @@ case "${1:-help}" in
   spread-backtest) script spread_backtest.py "${@:2}" && echo "Report: reports/spread_backtest.md" ;;
   risk-sweep) script risk_sweep.py "${@:2}" && echo "Report: reports/risk_sweep.md" ;;
   et-holdout) script et_holdout.py "${@:2}" && echo "Report: reports/et_holdout.md" ;;
+  mr4-load)   script mr4_load.py "${@:2}" ;;
+  mr4-backtest) script mr4_backtest.py "${@:2}" && echo "Report: reports/mr4_backtest.md" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
@@ -102,6 +104,8 @@ Usage: deploy/tradex.sh <command>
   spread-load  SP-1.0 spreads/condor + TP-1.0 pullback: load their NIFTY option legs from Nov 2023 (after fut-load)
   et-holdout   RL-1.0 ONCE: ET ATM sell + 2% trailing stop, no expiry days, on the held-back year (reports/et_holdout.md)
   risk-sweep   RL-1.0: day/week/per-trade loss limits for ₹1L on ET ATM sell + TP-1.0 (study, reports/risk_sweep.md)
+  mr4-load     MR-4: load NIFTY + BANKNIFTY spot, VIX, futures volume and option legs, 3 years (resumable)
+  mr4-backtest MR-4 mean reversion backtest + walk-forward, NIFTY + BANKNIFTY (reports/mr4_backtest.md)
   spread-backtest SP-1.0 credit/debit spreads + range-day iron condor and TP-1.0 trend pullback, fixed pass bar
   stock-backtest IS-1.0: 3 intraday stock setups x long/short, scored on the fixed pass bar (reports/stock_backtest.md)
   ema-paper-once 9/21 EMA: run one PAPER-engine step now (the ema-paper service does this every minute)

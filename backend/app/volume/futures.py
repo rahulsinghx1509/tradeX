@@ -84,12 +84,14 @@ def near_month(day: date, futs: list[tuple[date, str]]) -> str | None:
 
 
 def load(session: Session, client: Any, start: date, end: date,
-         log: Callable[[str], None] = print, underlying: str = UNDERLYING) -> FutLoad:
-    """Fetch and store every trading day's near-month futures 1m candles in [start, end]."""
+         log: Callable[[str], None] = print, underlying: str = UNDERLYING,
+         store_symbol: str = FUT_SYMBOL) -> FutLoad:
+    """Fetch and store every trading day's near-month futures 1m candles in [start, end].
+    Stored under `store_symbol` (NIFTY: FUT_SYMBOL; MR-4 passes its own name for BANKNIFTY)."""
     rep = FutLoad()
     days = trading_days(start, end)
-    done = S.done_set(session, FUT_SYMBOL)
-    todo = [d for d in days if (FUT_SYMBOL, d) not in done]
+    done = S.done_set(session, store_symbol)
+    todo = [d for d in days if (store_symbol, d) not in done]
     rep.skipped = len(days) - len(todo)
     log(f"{underlying} near-month futures: {rep.skipped} days already stored, {len(todo)} to fetch")
     if not todo:
@@ -105,11 +107,11 @@ def load(session: Session, client: Any, start: date, end: date,
             candles = L.fetch_day(client, sym, "FNO", d)
         except Exception as exc:  # recorded; ERROR days are retried on the next run
             rep.errors.append(f"{sym} {d}: {str(exc)[:200]}")
-            S.record_fetch(session, FUT_SYMBOL, d, 0, "ERROR", f"{sym}: {exc}")
+            S.record_fetch(session, store_symbol, d, 0, "ERROR", f"{sym}: {exc}")
             session.commit()
             continue
-        n = S.save_minutes(session, FUT_SYMBOL, d, candles)
-        S.record_fetch(session, FUT_SYMBOL, d, n, "OK" if n else "EMPTY", None if n else sym)
+        n = S.save_minutes(session, store_symbol, d, candles)
+        S.record_fetch(session, store_symbol, d, n, "OK" if n else "EMPTY", None if n else sym)
         session.commit()
         if n:
             rep.days += 1
