@@ -1,0 +1,30 @@
+# MR-4 rule R4: no trades on these days (RBI policy decision, Union Budget, Lok Sabha result).
+# RBI decision = last day of the MPC meeting. 2026 dates: RBI calendar as reported by Angel One
+# (read 2026-11-20). 2023-2025 dates and the budget dates are from memory: NOT_VERIFIED, check
+# against rbi.org.in / indiabudget.gov.in. Weekend dates (e.g. Budget 1 Feb 2025, 1 Feb 2026) are
+# special sessions that the backtest never trades anyway; they are listed for completeness.
+date,event,status
+2023-12-08,RBI policy,NOT_VERIFIED
+2024-02-01,Union Budget (interim),NOT_VERIFIED
+2024-02-08,RBI policy,NOT_VERIFIED
+2024-04-05,RBI policy,NOT_VERIFIED
+2024-06-04,Lok Sabha election result,NOT_VERIFIED
+2024-06-07,RBI policy,NOT_VERIFIED
+2024-07-23,Union Budget,NOT_VERIFIED
+2024-08-08,RBI policy,NOT_VERIFIED
+2024-10-09,RBI policy,NOT_VERIFIED
+2024-12-06,RBI policy,NOT_VERIFIED
+2025-02-01,Union Budget,NOT_VERIFIED
+2025-02-07,RBI policy,NOT_VERIFIED
+2025-04-09,RBI policy,NOT_VERIFIED
+2025-06-06,RBI policy,NOT_VERIFIED
+2025-08-06,RBI policy,NOT_VERIFIED
+2025-10-01,RBI policy,NOT_VERIFIED
+2025-12-05,RBI policy,NOT_VERIFIED
+2026-02-01,Union Budget,NOT_VERIFIED
+2026-02-06,RBI policy,secondary source
+2026-04-08,RBI policy,secondary source
+2026-06-05,RBI policy,secondary source
+2026-08-05,RBI policy,secondary source
+2026-10-07,RBI policy,secondary source
+2026-12-04,RBI policy,secondary source

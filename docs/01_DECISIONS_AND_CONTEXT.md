@@ -602,3 +602,32 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   - Not yet checked: margin for an unhedged ATM sell on ₹1L (NOT_VERIFIED, likely more than ₹1L);
     live fills vs the assumed 0.5% + 0.5 pt slippage. Next step (needs RK's approval): run it as a
     PAPER signal next to EMA-921 / ORB-1.0 / ET-1.0. No real orders.
+
+## 27. MR-4 mean reversion on NIFTY + BANKNIFTY options (2026-11-20)
+
+- **RK, 2026-11-20:** after the coordinator posted the MR-4 rule list (R1-R26: day filter, daily
+  RSI(2) + SMA(200) bias, Setup A gap fill on 5-minute bars, Setup B VWAP-band + Bollinger
+  confluence fade with a hammer/star reversal on 15-minute bars, ITM ~0.7-delta option buy,
+  2 trades a day, ₹3k day / ₹6k week loss limits) and its NIFTY + BANKNIFTY version (wider
+  BANKNIFTY thresholds, R27-R31 for running both): **"ok then lets backtest MR-4 strategy on 3 yr data"**.
+  Backtest only, no orders.
+- Rules fixed before any result: `backend/app/meanrev/__init__.py`. Choices the posted words left
+  open, settled there: VWAP = spot typical price weighted by near-month FUTURES volume (the index
+  has no volume); half size and the 50/50 exits are fractions of 1 lot; Setup A enters only at
+  09:20 and its stop (09:15-09:29 extreme) is checked from 09:30; the 90-minute exit is Setup B
+  only; the stretch may be on the hammer or the bar before it (any bar of a star); delta from the
+  ATM option's implied volatility (India VIX if no ATM price); R29 for BANKNIFTY Setup B only;
+  "election result" = the Lok Sabha result day. Event days in `app/data/mr4_event_days.csv`
+  (dates before 2026 NOT_VERIFIED).
+- Three years Nov 2023 - Oct 2026, scored per year. The Nov 2023 - Oct 2024 held-back year is
+  already used (RL-1.0), so the out-of-sample check is an anchored walk-forward: a 3 x 3 grid of
+  0.75 / 1 / 1.25 x the gap band (R10) and trend-day block (R6); pick on year 1, test year 2;
+  pick on years 1-2, test year 3; holds = years 2+3 out of sample net > 0 and PF >= 1.10.
+  The verdict row uses the posted values. Pass (R26, per index): PF >= 1.10, max DD < 20% of ₹1L,
+  >= 60 trades, every year net > 0, walk-forward holds.
+- Rows: per index full / Setup A only / Setup B only / BANKNIFTY + R29 / no-bias days at full size;
+  combined account with and without R29, split by index (R31).
+- Commands: `tradex.sh mr4-load` (NIFTY + BANKNIFTY spot, India VIX 1m, BANKNIFTY near-month
+  futures stored as NSE-BANKNIFTY-FUT-NEAR, option legs; resumable), then `tradex.sh mr4-backtest`
+  (reports/mr4_backtest.md, mr4_trades.csv). Needs the daily candles from `backfill` for SMA(200).
+- Result: pending RK's server run.

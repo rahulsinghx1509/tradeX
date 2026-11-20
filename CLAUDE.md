@@ -68,6 +68,9 @@ Read these before doing any work:
   `backend/app/pullback/`, `tradex.sh spread-load` / `spread-backtest`. Result 2026-11-05: all 7 judged rows FAIL.
 - 🔀 2026-11-05 RL-1.0 (docs/01 §26): ET-1.0 ATM sell, no expiry days, ₹2k 1R trailing stop, ₹3k day loss / ₹6k day lock / ₹6k week loss
   (`backend/app/spreads/risk.py`) **PASSED the one-time held-back-year test** (net +₹11.3k, PF 1.28). Second tested rule after VJ-1.0. PAPER only, pending RK.
+- 🔀 2026-11-20 RK: backtest MR-4 mean reversion (gap fill + VWAP/Bollinger confluence fade, ITM ~0.7 delta
+  option buy) on NIFTY + BANKNIFTY, 3 years, walk-forward instead of a held-back year (docs/01 §27),
+  `backend/app/meanrev/`, `tradex.sh mr4-load` / `mr4-backtest`. Result pending.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
@@ -92,5 +95,7 @@ Read these before doing any work:
   signal time) and the range-day iron condor (straddle engine with `short_offset`); `report.py` scores SP + TP rows.
 - `backend/app/pullback/` – TP-1.0 trend-pullback option buying (futures VWAP, risk limits); loader re-runs until no leg is missing.
 - `backend/app/volume/` – VF-1.0: near-month futures 1m loader (`futures.py`), RVOL + entry filter (`rvol.py`); engines take `entry_filter`.
+- `backend/app/meanrev/` – MR-4 mean reversion (rules R1-R31 in `__init__.py`): indicators, engine (candidates ->
+  index exits -> account), report (rows, walk-forward, R26 verdict), data + loader (recorder passes like TP-1.0).
 - `backend/app/stocks/` – intraday stocks (NIFTY 50 + Next 50): 5-minute loader (`tradex.sh stock-load`), IS-1.0 rules (`rules.py`), engine, `stock-backtest`.
 - Tests: `cd backend && python -m pytest` (SQLite); set `TEST_DATABASE_URL` to run on PostgreSQL.
