@@ -24,12 +24,14 @@ This adapter only READS data. It never calls any order, modify or cancel method.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time as _time
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from app.core.config import Settings
+from app.core.config import REPO_ROOT, Settings
 from app.core.market_time import IST, bar_starts_for_day, session_bounds, to_ist
 from app.providers.base import (
     Candle,
@@ -56,10 +58,46 @@ RATE_LIMIT_BACKOFF = (2, 4, 8, 16)
 KNOWN_INDICES = frozenset({"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTYNXT50"})
 # Groww resets every login session daily at 06:00 IST, so log in again after that.
 DAILY_RESET_HOUR_IST = 6
+# Shared login state for every TradeX process on the server (collector, signals, ema-paper and
+# the one-off loaders all mount reports/). Added 2026-11-20 after a day on which each process
+# logged in on its own and retried every minute, and Groww refused every login with "rate limit
+# exceeded" for hours (also 2026-11-18). Now:
+# - one successful login is shared: the access token is kept here until the next 06:00 IST reset,
+#   so the other processes don't log in at all;
+# - after a refused login, NO process tries again before the shared cooldown ends (one step
+#   longer per refusal in a row). Groww's real login limit is NOT_VERIFIED.
+# The file holds a day's access token: it stays on the server (reports/ is gitignored), mode 600.
+SESSION_FILE = REPO_ROOT / "reports" / ".groww_session.json"
+LOGIN_COOLDOWN = (120, 300, 600, 900, 1800)
 
 
 def is_rate_limited(exc: Exception) -> bool:
     return type(exc).__name__ == "GrowwAPIRateLimitException" or "rate limit" in str(exc).lower()
+
+
+def read_session() -> dict:
+    try:
+        return json.loads(SESSION_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def write_session(data: dict) -> None:
+    """Best effort: a read-only or missing folder just means no sharing."""
+    try:
+        SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = SESSION_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        os.chmod(tmp, 0o600)
+        tmp.replace(SESSION_FILE)
+    except OSError as exc:
+        log.warning("Could not save the shared Groww login state: %s", type(exc).__name__)
+
+
+def login_paused_for(now: float | None = None) -> float:
+    """Seconds left in the shared login cooldown (0 = a login may be tried)."""
+    now = _time.time() if now is None else now
+    return max(0.0, float(read_session().get("next_login_after", 0)) - now)
 
 
 def is_auth_expired(exc: Exception) -> bool:
@@ -170,6 +208,7 @@ class GrowwProvider(MarketDataProvider):
         self._settings = settings
         self._client = client
         self._logged_in_at: datetime | None = None  # None for an injected (test) client
+        self._token: str | None = None
         self._last_call = 0.0
 
     # ------------------------------------------------------------ connection
@@ -182,6 +221,17 @@ class GrowwProvider(MarketDataProvider):
             from growwapi import GrowwAPI
         except ImportError as exc:  # pragma: no cover
             raise ProviderError("growwapi is not installed: pip install -r requirements.txt") from exc
+        shared = read_session()
+        token, at = shared.get("token"), shared.get("logged_in_at")
+        if token and at:
+            logged = datetime.fromisoformat(at)
+            if logged >= last_daily_reset(datetime.now(UTC)):  # another process's login, still valid
+                self._client, self._logged_in_at, self._token = GrowwAPI(token), logged, token
+                return self._client
+        wait = login_paused_for()
+        if wait > 0:
+            raise ProviderError(f"Groww login paused for {wait:.0f}s after a rate limit exceeded "
+                                "answer (shared by every TradeX process)")
         try:
             if s.groww_totp_token and s.groww_totp_secret:
                 import pyotp
@@ -201,12 +251,18 @@ class GrowwProvider(MarketDataProvider):
                     "(or GROWW_TOTP_TOKEN + GROWW_TOTP_SECRET) in .env"
                 )
             self._client = GrowwAPI(token)
-            self._logged_in_at = datetime.now(UTC)
+            self._logged_in_at, self._token = datetime.now(UTC), token
         except ProviderError:
             raise
         except Exception as exc:
+            if is_rate_limited(exc):
+                fails = int(read_session().get("failures", 0)) + 1
+                step = LOGIN_COOLDOWN[min(fails, len(LOGIN_COOLDOWN)) - 1]
+                write_session({"failures": fails, "next_login_after": _time.time() + step})
             # Only the error type is reported, so a secret can never leak into logs.
             raise ProviderError(f"Groww login failed ({type(exc).__name__}: {exc})") from None
+        write_session({"token": token, "logged_in_at": self._logged_in_at.isoformat(),
+                       "failures": 0, "next_login_after": 0})
         return self._client
 
     def _session_expired(self) -> bool:
@@ -231,6 +287,8 @@ class GrowwProvider(MarketDataProvider):
                     _time.sleep(delay)
                     continue
                 if is_auth_expired(exc) and not relogged and self._logged_in_at is not None:
+                    if self._token and read_session().get("token") == self._token:  # dead: forget it
+                        write_session({"failures": 0, "next_login_after": 0})
                     self._client, relogged = None, True
                     continue
                 raise ProviderError(f"Groww {method} failed ({type(exc).__name__}: {exc})") from None

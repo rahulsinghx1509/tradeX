@@ -635,4 +635,10 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   to Groww too. `mr4-load` now waits and retries the login (1, 2, 5, 10, 15 min), and
   `tradex.sh pause-live` stops those three services during a long load (`tradex.sh start` brings
   them back). Run it after 15:30 IST so no PAPER signals are missed.
+- Same day, even after `pause-live`, every `mr4-load` login try for 30 minutes got "rate limit
+  exceeded": the services had been retrying their own logins every minute (the 2026-11-18
+  cooldown patch was never merged). Fix in `providers/groww.py`: every TradeX process now shares
+  one login (token kept in `reports/.groww_session.json`, mode 600, until the 06:00 IST reset)
+  and one cooldown after a refused login (2, 5, 10, 15, 30 min), so the server makes about one
+  login a day instead of one per process per minute.
 - Result: pending RK's server run.
