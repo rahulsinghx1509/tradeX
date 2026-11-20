@@ -203,6 +203,39 @@ class Results:
     wf: dict[str, WalkForward]
     vix_fallback_days: int
     iv_sources: Counter
+    data_problems: list[str] = field(default_factory=list)  # any = verdicts are NOT JUDGED
+    data_lines: list[str] = field(default_factory=list)
+
+
+MIN_VWAP_SHARE = 0.90  # futures volume (VWAP) on at least 90% of the complete spot days
+MAX_MISSING_LEGS = 0.05  # at most 5% of priced entries without option candles
+
+
+def data_check(prepared, inp: Inputs, rows: list[Row]) -> tuple[list[str], list[str]]:
+    """(problems, lines): is the data complete enough for a verdict? Missing futures volume
+    silently switches Setup B off, and missing option legs silently drop trades."""
+    problems, lines = [], []
+    for u, days in prepared.items():
+        inside = [i for d, i in days.items() if inp.start <= d <= inp.end and i.complete]
+        with_vwap = sum(1 for i in inside if i.has_vwap)
+        share = with_vwap / len(inside) if inside else 0.0
+        lines.append(f"{u}: {len(inside)} complete spot days, futures volume (VWAP) on "
+                     f"{with_vwap} ({share:.0%})")
+        if share < MIN_VWAP_SHARE:
+            problems.append(f"{u} futures volume is missing on {len(inside) - with_vwap} of "
+                            f"{len(inside)} days, so Setup B could not run on them")
+        row = next((r for r in rows if r.judged and r.underlying == u), None)
+        if row is not None:
+            missing = row.skips.get("NO_DATA", 0) + row.skips.get("NO_CONTRACT", 0)
+            tried = missing + len(row.trades)
+            lines.append(f"{u}: {len(row.trades)} entries priced, {missing} without option candles")
+            if tried and missing / tried > MAX_MISSING_LEGS:
+                problems.append(f"{u}: {missing} of {tried} entries had no option candles stored")
+    if inp.market.vix_915:
+        lines.append(f"India VIX 1-minute: {len(inp.market.vix_915)} days")
+    else:
+        lines.append("India VIX 1-minute: none stored (the previous daily close is used)")
+    return problems, lines
 
 
 def run_all(inp: Inputs) -> Results:
@@ -232,7 +265,8 @@ def run_all(inp: Inputs) -> Results:
     days = sorted({d for u in prepared for d in prepared[u] if inp.start <= d <= inp.end})
     fallback = sum(1 for d in days if d not in inp.market.vix_915)
     iv = Counter(t.iv_source for r in rows for t in r.trades)
-    return Results(inp, rows, wf, fallback, iv)
+    problems, lines = data_check(prepared, inp, rows)
+    return Results(inp, rows, wf, fallback, iv, problems, lines)
 
 
 # ----------------------------------------------------------------------------- verdicts
@@ -279,7 +313,13 @@ def markdown(res: Results) -> str:
            "Option BUY at ~0.7 delta, 1 lot (NIFTY 65 / BANKNIFTY 30), fills at the option's "
            "1-minute open, slippage 0.5% + 0.5 pt a side, full cost stack. Backtest only, no orders.",
            "", "Years: " + ", ".join(f"Y{i + 1} {a} to {b}" for i, (a, b) in enumerate(yb)) + ".",
-           "", "## Verdict per index (R26, R31)", ""]
+           "", "## Data check", ""] + [f"- {x}" for x in res.data_lines]
+    if res.data_problems:
+        out += ["", "**DATA INCOMPLETE: the verdicts below are NOT JUDGED.** Run "
+                "`deploy/tradex.sh mr4-load` until it finishes without errors, then "
+                "`deploy/tradex.sh mr4-backtest` again. Problems:"]
+        out += [f"- {x}" for x in res.data_problems]
+    out += ["", "## Verdict per index (R26, R31)", ""]
     for u in UNDERLYINGS:
         row = next((r for r in res.rows if r.judged and r.underlying == u), None)
         if row is None:
@@ -287,7 +327,8 @@ def markdown(res: Results) -> str:
             continue
         ok, failed = verdict(row, res.wf.get(u), st)
         s = score(row.trades, st)
-        out.append(f"- **{u}: {'PASS' if ok else 'FAIL'}** — {s.trades} trades, net {rs(s.net)}, "
+        word = "NOT JUDGED (data incomplete)" if res.data_problems else ("PASS" if ok else "FAIL")
+        out.append(f"- **{u}: {word}** — {s.trades} trades, net {rs(s.net)}, "
                    f"PF {nv(s.pf)}, max DD {s.max_dd_pct:g}%"
                    + ("" if ok else f"; fails: {', '.join(failed)}") + ".")
     comb = next((r for r in res.rows if r.name.startswith("BOTH combined account (")), None)
@@ -304,7 +345,7 @@ def markdown(res: Results) -> str:
         s = score(r.trades, st)
         if r.judged:
             ok, failed = verdict(r, res.wf.get(r.underlying), st)
-            v = "**PASS**" if ok else "FAIL"
+            v = "NOT JUDGED" if res.data_problems else ("**PASS**" if ok else "FAIL")
         else:
             ok = all(bar_checks(s).values())
             v = ("meets bar" if ok else "below bar") + " (not judged)"

@@ -326,3 +326,14 @@ def test_loader_fetches_the_legs_then_backtest_reads_them(session, monkeypatch):
     full = next(r for r in res.rows if r.name == "NIFTY MR-4 full (A+B)")
     assert full.trades and all(t.setup == "A" for t in full.trades)
     assert all(t.day.weekday() != 1 for t in full.trades)  # Tuesday = NIFTY expiry: no trade
+
+
+def test_missing_futures_volume_makes_the_verdict_not_judged():
+    spot = pd.DataFrame(minute_rows(DAY, gap_down_fill, wick=0.5))
+    closes = closes_for(DAY)
+    ix = {"NIFTY": R.IndexInput("NIFTY", spot, pd.DataFrame(), E.daily_closes(closes, spot),
+                                FakeOptions(spot))}
+    res = R.run_all(R.Inputs(DAY, DAY, ix, market()))
+    assert res.data_problems and "futures volume" in res.data_problems[0]
+    text = R.markdown(res)
+    assert "NOT JUDGED" in text and "DATA INCOMPLETE" in text

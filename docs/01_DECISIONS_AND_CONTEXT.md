@@ -630,4 +630,9 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
 - Commands: `tradex.sh mr4-load` (NIFTY + BANKNIFTY spot, India VIX 1m, BANKNIFTY near-month
   futures stored as NSE-BANKNIFTY-FUT-NEAR, option legs; resumable), then `tradex.sh mr4-backtest`
   (reports/mr4_backtest.md, mr4_trades.csv). Needs the daily candles from `backfill` for SMA(200).
+- 2026-11-20 first `mr4-load` stopped at once: "Groww login failed (GrowwAPIRateLimitException)",
+  right after `tradex.sh update` restarted the collector, `signals` and `ema-paper`, which all log in
+  to Groww too. `mr4-load` now waits and retries the login (1, 2, 5, 10, 15 min), and
+  `tradex.sh pause-live` stops those three services during a long load (`tradex.sh start` brings
+  them back). Run it after 15:30 IST so no PAPER signals are missed.
 - Result: pending RK's server run.

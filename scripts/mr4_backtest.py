@@ -44,6 +44,8 @@ def main() -> int:
     (REPORTS / "mr4_backtest.md").write_text(text, encoding="utf-8")
     n = R.write_csv(res, REPORTS / "mr4_trades.csv")
     print("\n" + text)
+    if res.data_problems:
+        print("DATA INCOMPLETE (verdicts NOT JUDGED): " + "; ".join(res.data_problems))
     print(f"Trades CSV: reports/mr4_trades.csv ({n} rows)")
     return 0
 
