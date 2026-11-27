@@ -56,6 +56,7 @@ case "${1:-help}" in
   mr4-load)   script mr4_load.py "${@:2}" ;;
   pause-live) dc stop collector signals ema-paper && echo "Collector and PAPER engines stopped (no Groww logins). Bring them back with: deploy/tradex.sh start" ;;
   mr4-backtest) script mr4_backtest.py "${@:2}" && echo "Report: reports/mr4_backtest.md" ;;
+  mr4-nifty)  script mr4_nifty.py "${@:2}" ;;
   probe)      script probe_derivatives_history.py "${@:2}" && echo "Report: reports/derivatives_probe.md" ;;
   final)      script signal_study.py --variants --final "${@:2}" && echo "Report: reports/final_test.md" ;;
   chat-id)    script telegram_chat_id.py ;;
@@ -108,6 +109,7 @@ Usage: deploy/tradex.sh <command>
   mr4-load     MR-4: load NIFTY + BANKNIFTY spot, VIX, futures volume and option legs, 3 years (resumable)
   pause-live   stop the collector and PAPER engines (so a long Groww load gets all the logins); start brings them back
   mr4-backtest MR-4 mean reversion backtest + walk-forward, NIFTY + BANKNIFTY (reports/mr4_backtest.md)
+  mr4-nifty    MR-4N: NIFTY gap fill, bigger gaps, options vs futures, leave-one-year-out (reports/mr4_nifty.md)
   spread-backtest SP-1.0 credit/debit spreads + range-day iron condor and TP-1.0 trend pullback, fixed pass bar
   stock-backtest IS-1.0: 3 intraday stock setups x long/short, scored on the fixed pass bar (reports/stock_backtest.md)
   ema-paper-once 9/21 EMA: run one PAPER-engine step now (the ema-paper service does this every minute)

@@ -22,6 +22,7 @@ from app.ema921 import loader as L
 from app.meanrev import FUT_SYMBOLS, UNDERLYINGS, VIX_UNDERLYING
 from app.meanrev import data as D
 from app.meanrev import engine as E
+from app.meanrev import nifty as N
 from app.meanrev import report as R
 from app.pullback.loader import Recorder
 from app.volume import futures as F
@@ -70,6 +71,10 @@ def _passes(session, client, start, end, log, reps, tried, recorders, wrap, labe
         recorders.clear()
         inp = D.load_inputs(session, start, end, UNDERLYINGS, wrap)
         R.run_all(inp)
+        if "NIFTY" in inp.indices:  # MR-4N's bigger-gap rows need their own option legs
+            ix = inp.indices["NIFTY"]
+            N.run_rows(inp, N.atr_pct_before(N.daily_hlc(D.stored_daily_frame(session, "NIFTY"),
+                                                         ix.spot)), None)
         total = 0
         for u, rec in recorders.items():
             new = sorted(rec.asked - tried[u])

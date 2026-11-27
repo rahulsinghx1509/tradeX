@@ -654,3 +654,10 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   full size: PF 1.02, DD 33%. As with earlier strategies, a small gross edge (~₹92/trade) is
   less than the costs (~₹176/trade).
 - BANKNIFTY: pending the re-run after the strike fix above.
+- 2026-11-27 RK: "I need you test for nifty only". MR-4N (`meanrev/nifty.py`, rules N1-N4,
+  fixed before any result): NIFTY Setup A only; gap variants 0.3-0.8% (posted), 0.5-2%, 0.75-2%,
+  >= 0.5 x ATR(14) (max 2%); each on the 0.7-delta option AND on NIFTY near-month futures (1 pt
+  slippage a side, futures cost stack, both NOT_VERIFIED; one lot needs more margin than ₹1L).
+  Out of sample: each year tested with the variant picked (best PF, >= 20 trades) on the other
+  two years; the joined test years face the R26 bar. Commands: `tradex.sh mr4-load` (fetches the
+  new option legs), then `tradex.sh mr4-nifty` (reports/mr4_nifty.md). Result pending.
