@@ -641,4 +641,16 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   one login (token kept in `reports/.groww_session.json`, mode 600, until the 06:00 IST reset)
   and one cooldown after a refused login (2, 5, 10, 15, 30 min), so the server makes about one
   login a day instead of one per process per minute.
-- Result: pending RK's server run.
+- 2026-11-27 first full run: NIFTY data complete, but BANKNIFTY had no option candles for 12 of
+  100 entries (Groww has no candles for some old BANKNIFTY strikes), so the 5% check failed and,
+  through a bug, also hid the NIFTY verdict. Fixes: each index is judged on its own data; and a
+  leg with no stored candles is priced at the nearest strike (up to 2 steps, deeper ITM first)
+  that has real ones (`engine.strike_shifts`, counted in the report, `strike_shift` in the CSV).
+  `mr4-load` fetches those neighbours only after the ~0.7 delta legs are done.
+- Result 2026-11-27, NIFTY (data complete): **FAIL**. Full A+B: 91 trades, win 39.6%, gross
+  +₹8,391, costs + slippage ₹16,009, net -₹7,618, PF 0.89, max DD 20.04%; years -₹16,004 (42),
+  +₹773 (27), +₹7,613 (22). Fails PF >= 1.10, max DD < 20%, every year > 0. Setup A (gap fill)
+  is 86 of the 91 trades (PF 0.90); Setup B fired 5 times in 3 years (PF 0.33). No-bias days at
+  full size: PF 1.02, DD 33%. As with earlier strategies, a small gross edge (~₹92/trade) is
+  less than the costs (~₹176/trade).
+- BANKNIFTY: pending the re-run after the strike fix above.

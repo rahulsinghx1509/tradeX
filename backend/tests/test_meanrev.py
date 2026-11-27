@@ -257,6 +257,28 @@ def test_missing_option_data_is_skipped_not_zero():
     assert E.price(c, inst, market(), CFG, check_risk=False) == "NO_DATA"
 
 
+def test_missing_strike_uses_nearest_strike_with_real_candles():
+    spot = pd.DataFrame(minute_rows(DAY, lambda i: (PREV, PREV)))
+    opts = FakeOptions(spot)
+    inst = E.instrument_for("NIFTY", opts, PARAMS["NIFTY"])
+    c = cand("NIFTY", 5, 1)
+    first = E.price(c, inst, market(), CFG, check_risk=False)
+    assert isinstance(first, E.Trade) and first.strike_shift == 0
+    opts.missing = {first.symbol}  # the ~0.7 delta strike has no candles
+    inst = E.instrument_for("NIFTY", opts, PARAMS["NIFTY"])
+    moved = E.price(c, inst, market(), CFG, check_risk=False)
+    assert isinstance(moved, E.Trade)
+    assert moved.strike_shift == 1 and moved.strike == first.strike - inst.step  # deeper ITM call
+    assert moved.delta > first.delta
+    assert E.strike_shifts(2) == [0, 1, -1, 2, -2] and E.strike_shifts(0) == [0]
+
+
+def test_one_index_data_gap_does_not_hide_the_other_verdict():
+    res = R.Results(None, [], {}, 0, Counter(), ["BANKNIFTY: 12 of 100"], [], {"BANKNIFTY"})
+    assert res.not_judged("BANKNIFTY") and res.not_judged("BOTH")
+    assert not res.not_judged("NIFTY")
+
+
 # ----------------------------------------------------------------------------- whole run
 def test_run_all_smoke():
     rows = minute_rows(DAY, gap_down_fill, wick=0.5)
@@ -270,6 +292,7 @@ def test_run_all_smoke():
     names = [r.name for r in res.rows]
     assert "NIFTY MR-4 full (A+B)" in names and "BOTH combined account + R29" in names
     full = next(r for r in res.rows if r.name == "NIFTY MR-4 full (A+B)")
+    assert "## By index and year" in R.markdown(res)
     assert len(full.trades) == 1 and full.trades[0].setup == "A"
     both = next(r for r in res.rows if r.name == "BOTH combined account (R27-R30)")
     assert len(both.trades) == 1  # same minute, same direction: one index only (R27)

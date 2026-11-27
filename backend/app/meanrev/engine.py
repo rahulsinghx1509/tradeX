@@ -458,6 +458,7 @@ class Trade:
     slippage: float = 0.0
     charges: float = 0.0
     net_pnl: float = 0.0
+    strike_shift: int = 0  # strikes from the ~0.7 delta one (+ = deeper ITM); 0 = as chosen
 
     @property
     def exit_time(self) -> datetime:
@@ -493,6 +494,22 @@ class Instrument:
         return self._cache[key]
 
 
+MAX_STRIKE_SHIFT = 2  # Settled 2026-11-27: Groww has no candles for some old BANKNIFTY strikes
+
+
+def strike_shifts(max_shift: int | None = None) -> list[int]:
+    """0, then neighbours by distance, deeper ITM first: 0, +1, -1, +2, -2. A leg with no stored
+    candles is priced at the nearest strike that has real ones; never invented prices.
+    (The loader sets MAX_STRIKE_SHIFT to 0 until the chosen legs are fetched, so it only asks
+    Groww for neighbours of legs that really have no candles.)"""
+    if max_shift is None:
+        max_shift = MAX_STRIKE_SHIFT
+    out = [0]
+    for k in range(1, max_shift + 1):
+        out += [k, -k]
+    return out
+
+
 def years_to(expiry: date, t: pd.Timestamp) -> float:
     end = pd.Timestamp(datetime.combine(expiry, time(15, 30)), tz=IST)
     return max((end - t).total_seconds(), 60.0) / (365 * 86400)
@@ -525,13 +542,27 @@ def price(c: Candidate, inst: Instrument, market: Market, cfg: EE.Config,
     qty = inst.lot * c.size
     if check_risk and abs(c.entry_spot - c.stop) * delta * qty > inst.max_risk:
         return "RISK_TOO_BIG"
-    sym = inst.options.contract(expiry, strike, opt)
-    if sym is None:
-        return "NO_CONTRACT"
-    m = inst.minutes(sym, c.day)
-    hit = m.open_at(t, FILL_GRACE)
+    target = strike
+    sym = m = hit = None
+    listed = False
+    for shift in strike_shifts():
+        k = target - shift * inst.step if call else target + shift * inst.step
+        if k <= 0:
+            continue
+        s = inst.options.contract(expiry, k, opt)
+        if s is None:
+            continue
+        listed = True
+        mm = inst.minutes(s, c.day)
+        h = mm.open_at(t, FILL_GRACE)
+        if h is not None:
+            sym, m, hit, strike = s, mm, h, k
+            break
     if hit is None:
-        return "NO_DATA"
+        return "NO_DATA" if listed else "NO_CONTRACT"
+    shift = round((target - strike) / inst.step) if call else round((strike - target) / inst.step)
+    if strike != target:
+        delta = abs(I.bs_delta(c.entry_spot, strike, yrs, iv, RISK_FREE, call))
     et, ep = hit
     efill = C.buy_fill(ep, cfg.slippage_pct, cfg.slippage_points)
     fills = []
@@ -546,7 +577,7 @@ def price(c: Candidate, inst: Instrument, market: Market, cfg: EE.Config,
                           C.sell_fill(xp, cfg.slippage_pct, cfg.slippage_points), stale))
     tr = Trade(c.underlying, c.setup, c.day, c.direction, c.pattern, c.size, qty, opt, strike,
                expiry, sym, round(delta, 3), round(iv, 4), src, et.to_pydatetime(), c.entry_spot,
-               round(c.stop, 2), ep, efill, fills)
+               round(c.stop, 2), ep, efill, fills, strike_shift=shift)
     gross = sum((f.price - ep) * qty * f.fraction for f in fills)
     filled = sum((f.fill - efill) * qty * f.fraction for f in fills)
     sell_value = sum(f.fill * qty * f.fraction for f in fills)

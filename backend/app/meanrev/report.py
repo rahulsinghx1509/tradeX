@@ -203,18 +203,26 @@ class Results:
     wf: dict[str, WalkForward]
     vix_fallback_days: int
     iv_sources: Counter
-    data_problems: list[str] = field(default_factory=list)  # any = verdicts are NOT JUDGED
+    data_problems: list[str] = field(default_factory=list)
     data_lines: list[str] = field(default_factory=list)
+    incomplete: set[str] = field(default_factory=set)  # indices whose verdict is NOT JUDGED
+
+    def not_judged(self, underlying: str) -> bool:
+        """BOTH (the combined account) is not judged if either index's data is incomplete."""
+        if underlying == "BOTH":
+            return bool(self.incomplete)
+        return underlying in self.incomplete
 
 
 MIN_VWAP_SHARE = 0.90  # futures volume (VWAP) on at least 90% of the complete spot days
 MAX_MISSING_LEGS = 0.05  # at most 5% of priced entries without option candles
 
 
-def data_check(prepared, inp: Inputs, rows: list[Row]) -> tuple[list[str], list[str]]:
-    """(problems, lines): is the data complete enough for a verdict? Missing futures volume
-    silently switches Setup B off, and missing option legs silently drop trades."""
-    problems, lines = [], []
+def data_check(prepared, inp: Inputs, rows: list[Row]) -> tuple[list[str], list[str], set[str]]:
+    """(problems, lines, incomplete indices): is each index's data complete enough for its
+    verdict? Missing futures volume silently switches Setup B off, and missing option legs
+    silently drop trades. One index's gap does not block the other's verdict."""
+    problems, lines, incomplete = [], [], set()
     for u, days in prepared.items():
         inside = [i for d, i in days.items() if inp.start <= d <= inp.end and i.complete]
         with_vwap = sum(1 for i in inside if i.has_vwap)
@@ -224,18 +232,24 @@ def data_check(prepared, inp: Inputs, rows: list[Row]) -> tuple[list[str], list[
         if share < MIN_VWAP_SHARE:
             problems.append(f"{u} futures volume is missing on {len(inside) - with_vwap} of "
                             f"{len(inside)} days, so Setup B could not run on them")
+            incomplete.add(u)
         row = next((r for r in rows if r.judged and r.underlying == u), None)
         if row is not None:
             missing = row.skips.get("NO_DATA", 0) + row.skips.get("NO_CONTRACT", 0)
             tried = missing + len(row.trades)
             lines.append(f"{u}: {len(row.trades)} entries priced, {missing} without option candles")
+            moved = sum(1 for t in row.trades if t.strike_shift)
+            if moved:
+                lines.append(f"{u}: {moved} entries priced at a strike 1-{E.MAX_STRIKE_SHIFT} steps "
+                             "from the ~0.7 delta one (no candles stored for it)")
             if tried and missing / tried > MAX_MISSING_LEGS:
                 problems.append(f"{u}: {missing} of {tried} entries had no option candles stored")
+                incomplete.add(u)
     if inp.market.vix_915:
         lines.append(f"India VIX 1-minute: {len(inp.market.vix_915)} days")
     else:
         lines.append("India VIX 1-minute: none stored (the previous daily close is used)")
-    return problems, lines
+    return problems, lines, incomplete
 
 
 def run_all(inp: Inputs) -> Results:
@@ -265,8 +279,8 @@ def run_all(inp: Inputs) -> Results:
     days = sorted({d for u in prepared for d in prepared[u] if inp.start <= d <= inp.end})
     fallback = sum(1 for d in days if d not in inp.market.vix_915)
     iv = Counter(t.iv_source for r in rows for t in r.trades)
-    problems, lines = data_check(prepared, inp, rows)
-    return Results(inp, rows, wf, fallback, iv, problems, lines)
+    problems, lines, incomplete = data_check(prepared, inp, rows)
+    return Results(inp, rows, wf, fallback, iv, problems, lines, incomplete)
 
 
 # ----------------------------------------------------------------------------- verdicts
@@ -315,7 +329,8 @@ def markdown(res: Results) -> str:
            "", "Years: " + ", ".join(f"Y{i + 1} {a} to {b}" for i, (a, b) in enumerate(yb)) + ".",
            "", "## Data check", ""] + [f"- {x}" for x in res.data_lines]
     if res.data_problems:
-        out += ["", "**DATA INCOMPLETE: the verdicts below are NOT JUDGED.** Run "
+        out += ["", f"**DATA INCOMPLETE for {', '.join(sorted(res.incomplete))}: its verdict "
+                "below is NOT JUDGED.** Run "
                 "`deploy/tradex.sh mr4-load` until it finishes without errors, then "
                 "`deploy/tradex.sh mr4-backtest` again. Problems:"]
         out += [f"- {x}" for x in res.data_problems]
@@ -327,7 +342,7 @@ def markdown(res: Results) -> str:
             continue
         ok, failed = verdict(row, res.wf.get(u), st)
         s = score(row.trades, st)
-        word = "NOT JUDGED (data incomplete)" if res.data_problems else ("PASS" if ok else "FAIL")
+        word = "NOT JUDGED (data incomplete)" if res.not_judged(u) else ("PASS" if ok else "FAIL")
         out.append(f"- **{u}: {word}** — {s.trades} trades, net {rs(s.net)}, "
                    f"PF {nv(s.pf)}, max DD {s.max_dd_pct:g}%"
                    + ("" if ok else f"; fails: {', '.join(failed)}") + ".")
@@ -340,12 +355,26 @@ def markdown(res: Results) -> str:
                          + ("" if ok else f" ({', '.join(failed)})"))
         out.append("- Combined account, each index on its own (R31, without walk-forward): "
                    + "; ".join(parts) + ".")
+    out += ["", "## By index and year (verdict rows)", "",
+            "| Index | Year | Trades | Win % | Gross | Costs + slippage | Net | PF | Max DD |",
+            "|---|---|---|---|---|---|---|---|---|"]
+    for u in UNDERLYINGS:
+        row = next((r for r in res.rows if r.judged and r.underlying == u), None)
+        if row is None:
+            continue
+        tag = " (data incomplete)" if res.not_judged(u) else ""
+        parts = [(f"Y{i + 1}", [t for t in row.trades if a <= t.day < b])
+                 for i, (a, b) in enumerate(yb)] + [("Total", row.trades)]
+        for name, ts in parts:
+            s = score(ts, st)
+            out.append(f"| {u}{tag} | {name} | {s.trades} | {nv(s.win_rate)} | {rs(s.gross)} | "
+                       f"{rs(s.friction)} | {rs(s.net)} | {nv(s.pf)} | {s.max_dd_pct:g}% |")
     out += ["", "## All rows", "", HEADER, "|" + "---|" * 12]
     for r in res.rows:
         s = score(r.trades, st)
         if r.judged:
             ok, failed = verdict(r, res.wf.get(r.underlying), st)
-            v = "NOT JUDGED" if res.data_problems else ("**PASS**" if ok else "FAIL")
+            v = "NOT JUDGED" if res.not_judged(r.underlying) else ("**PASS**" if ok else "FAIL")
         else:
             ok = all(bar_checks(s).values())
             v = ("meets bar" if ok else "below bar") + " (not judged)"
@@ -412,7 +441,8 @@ def write_csv(res: Results, path: Path) -> int:
         w = csv.writer(fh)
         w.writerow(["row", "underlying", "setup", "day", "direction", "pattern", "size", "strike",
                     "type", "expiry", "delta", "iv", "iv_source", "entry_time", "entry_spot",
-                    "stop", "entry_price", "exits", "gross_pnl", "friction", "net_pnl", "stale"])
+                    "stop", "entry_price", "exits", "gross_pnl", "friction", "net_pnl", "stale",
+                    "strike_shift"])
         for r in res.rows:
             if not (r.judged or r.underlying == "BOTH"):
                 continue
@@ -422,6 +452,6 @@ def write_csv(res: Results, path: Path) -> int:
                 w.writerow([r.name, t.underlying, t.setup, t.day, t.direction, t.pattern, t.size,
                             t.strike, t.option_type, t.expiry, t.delta, t.iv, t.iv_source,
                             f"{t.entry_time:%Y-%m-%d %H:%M}", t.entry_spot, t.stop, t.entry_price,
-                            exits, t.gross_pnl, t.friction, t.net_pnl, t.stale])
+                            exits, t.gross_pnl, t.friction, t.net_pnl, t.stale, t.strike_shift])
                 n += 1
     return n
