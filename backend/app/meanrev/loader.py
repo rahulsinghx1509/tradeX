@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.ema921 import loader as L
 from app.meanrev import FUT_SYMBOLS, UNDERLYINGS, VIX_UNDERLYING
 from app.meanrev import data as D
+from app.meanrev import engine as E
 from app.meanrev import report as R
 from app.pullback.loader import Recorder
 from app.volume import futures as F
@@ -51,6 +52,20 @@ def load_all(session: Session, client: Any, start: date, end: date,
         recorders[u] = Recorder(opts)
         return recorders[u]
 
+    # First the ~0.7 delta legs only; once none is new, also the nearest neighbours of the
+    # ones Groww had no candles for (engine.strike_shifts).
+    full_shift = E.MAX_STRIKE_SHIFT
+    E.MAX_STRIKE_SHIFT = 0
+    try:
+        _passes(session, client, start, end, log, reps, tried, recorders, wrap, "")
+        E.MAX_STRIKE_SHIFT = full_shift
+        _passes(session, client, start, end, log, reps, tried, recorders, wrap, " (nearby strikes)")
+    finally:
+        E.MAX_STRIKE_SHIFT = full_shift
+    return reps
+
+
+def _passes(session, client, start, end, log, reps, tried, recorders, wrap, label) -> None:
     for p in range(1, MAX_PASSES + 1):
         recorders.clear()
         inp = D.load_inputs(session, start, end, UNDERLYINGS, wrap)
@@ -64,8 +79,7 @@ def load_all(session: Session, client: Any, start: date, end: date,
                 rep = L.LoadReport()
                 L.fetch_legs(session, client, new, rep, u, f"{u} MR-4 legs", log)
                 reps.append(rep)
-        log(f"MR-4 pass {p}: {total} new option legs")
+        log(f"MR-4 pass {p}{label}: {total} new option legs")
         if not total:
             break
-    return reps
 

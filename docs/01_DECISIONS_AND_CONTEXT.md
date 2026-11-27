@@ -641,4 +641,10 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   one login (token kept in `reports/.groww_session.json`, mode 600, until the 06:00 IST reset)
   and one cooldown after a refused login (2, 5, 10, 15, 30 min), so the server makes about one
   login a day instead of one per process per minute.
+- 2026-11-27 first full run: NIFTY data complete, but BANKNIFTY had no option candles for 12 of
+  100 entries (Groww has no candles for some old BANKNIFTY strikes), so the 5% check failed and,
+  through a bug, also hid the NIFTY verdict. Fixes: each index is judged on its own data; and a
+  leg with no stored candles is priced at the nearest strike (up to 2 steps, deeper ITM first)
+  that has real ones (`engine.strike_shifts`, counted in the report, `strike_shift` in the CSV).
+  `mr4-load` fetches those neighbours only after the ~0.7 delta legs are done.
 - Result: pending RK's server run.

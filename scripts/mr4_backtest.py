@@ -45,7 +45,8 @@ def main() -> int:
     n = R.write_csv(res, REPORTS / "mr4_trades.csv")
     print("\n" + text)
     if res.data_problems:
-        print("DATA INCOMPLETE (verdicts NOT JUDGED): " + "; ".join(res.data_problems))
+        print(f"DATA INCOMPLETE ({', '.join(sorted(res.incomplete))} NOT JUDGED; "
+              "the other index's verdict stands): " + "; ".join(res.data_problems))
     print(f"Trades CSV: reports/mr4_trades.csv ({n} rows)")
     return 0
 

@@ -74,6 +74,8 @@ R23. BUY the in-the-money option nearest 0.7 delta: call for a long, put for a s
      (NIFTY 65, BANKNIFTY 30, flat for all dates as before). Delta: Black-Scholes, with the
      implied volatility of the ATM option of the same type at the entry minute, r = 6.5% (rate
      NOT_VERIFIED; its effect is small). If the ATM option has no price, India VIX is used.
+     Settled 2026-11-27: if that strike has no stored candles, the nearest strike up to 2 steps
+     away (deeper ITM first) with real candles is used, and the report counts these trades.
 R24. At most 2 trades a day and 1 position open at a time.
 R25. Day net loss ₹3,000 / week (Mon-Sun) net loss ₹6,000: no new entries after that. Open
      trades are never cut by these (as RL-1.0).
