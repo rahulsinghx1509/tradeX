@@ -653,7 +653,10 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   is 86 of the 91 trades (PF 0.90); Setup B fired 5 times in 3 years (PF 0.33). No-bias days at
   full size: PF 1.02, DD 33%. As with earlier strategies, a small gross edge (~₹92/trade) is
   less than the costs (~₹176/trade).
-- BANKNIFTY: pending the re-run after the strike fix above.
+- Result 2026-11-27, BANKNIFTY (re-run after the strike fix, data check passed): **FAIL**. 99 trades,
+  win 40.4%, gross -₹6,484 (negative even before costs), costs + slippage ₹24,977, net -₹31,461,
+  PF 0.67, max DD 38.03%; years -₹1,289 (37), -₹9,871 (33), -₹20,301 (29), getting worse each year.
+  MR-4 as posted fails on both indices; BANKNIFTY is dropped. Only the NIFTY follow-up (MR-4N) goes on.
 - 2026-11-27 RK: "I need you test for nifty only". MR-4N (`meanrev/nifty.py`, rules N1-N4,
   fixed before any result): NIFTY Setup A only; gap variants 0.3-0.8% (posted), 0.5-2%, 0.75-2%,
   >= 0.5 x ATR(14) (max 2%); each on the 0.7-delta option AND on NIFTY near-month futures (1 pt
