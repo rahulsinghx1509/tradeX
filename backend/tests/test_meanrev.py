@@ -292,6 +292,7 @@ def test_run_all_smoke():
     names = [r.name for r in res.rows]
     assert "NIFTY MR-4 full (A+B)" in names and "BOTH combined account + R29" in names
     full = next(r for r in res.rows if r.name == "NIFTY MR-4 full (A+B)")
+    assert "## By index and year" in R.markdown(res)
     assert len(full.trades) == 1 and full.trades[0].setup == "A"
     both = next(r for r in res.rows if r.name == "BOTH combined account (R27-R30)")
     assert len(both.trades) == 1  # same minute, same direction: one index only (R27)

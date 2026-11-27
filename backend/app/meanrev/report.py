@@ -355,6 +355,20 @@ def markdown(res: Results) -> str:
                          + ("" if ok else f" ({', '.join(failed)})"))
         out.append("- Combined account, each index on its own (R31, without walk-forward): "
                    + "; ".join(parts) + ".")
+    out += ["", "## By index and year (verdict rows)", "",
+            "| Index | Year | Trades | Win % | Gross | Costs + slippage | Net | PF | Max DD |",
+            "|---|---|---|---|---|---|---|---|---|"]
+    for u in UNDERLYINGS:
+        row = next((r for r in res.rows if r.judged and r.underlying == u), None)
+        if row is None:
+            continue
+        tag = " (data incomplete)" if res.not_judged(u) else ""
+        parts = [(f"Y{i + 1}", [t for t in row.trades if a <= t.day < b])
+                 for i, (a, b) in enumerate(yb)] + [("Total", row.trades)]
+        for name, ts in parts:
+            s = score(ts, st)
+            out.append(f"| {u}{tag} | {name} | {s.trades} | {nv(s.win_rate)} | {rs(s.gross)} | "
+                       f"{rs(s.friction)} | {rs(s.net)} | {nv(s.pf)} | {s.max_dd_pct:g}% |")
     out += ["", "## All rows", "", HEADER, "|" + "---|" * 12]
     for r in res.rows:
         s = score(r.trades, st)
