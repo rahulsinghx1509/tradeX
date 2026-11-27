@@ -70,7 +70,7 @@ Read these before doing any work:
   (`backend/app/spreads/risk.py`) **PASSED the one-time held-back-year test** (net +₹11.3k, PF 1.28). Second tested rule after VJ-1.0. PAPER only, pending RK.
 - 🔀 2026-11-20 RK: backtest MR-4 mean reversion (gap fill + VWAP/Bollinger confluence fade, ITM ~0.7 delta
   option buy) on NIFTY + BANKNIFTY, 3 years, walk-forward instead of a held-back year (docs/01 §27),
-  `backend/app/meanrev/`, `tradex.sh mr4-load` / `mr4-backtest`. Result pending.
+  `backend/app/meanrev/`, `tradex.sh mr4-load` / `mr4-backtest`. Result 2026-11-27: NIFTY FAIL (PF 0.89, net −₹7.6k); BANKNIFTY pending a re-run.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
