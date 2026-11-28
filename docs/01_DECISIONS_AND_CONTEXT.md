@@ -701,3 +701,38 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
     fit ₹1L. Sell 25600 CE + buy 25750 CE (MIS): ₹49,781 (SPAN ₹9.2k, exposure ₹35k, hedge ₹5.5k).
   - Reading: a thin edge (~₹100/trade) that rests on a few big days, disappears at double the
     assumed slippage, and needs about twice the account in margin as a naked sell. Stays PAPER only.
+
+## 29. Theta Harvest (TH-1.0, code PR-1.0): hedged NIFTY premium selling held overnight (2026-11-28)
+
+- Name chosen 2026-11-28: TH-A = candidate A (WT-1.0, weekend), TH-B = candidate B (WV-1.0, weekly).
+
+- **RK, 2026-11-28:** "Consider yourself a top trader and lets create a strategy ... from your
+  knowledge from internet ... which is profitable in past data." Constraints from the project:
+  ₹1L, 1 lot, options only, hedged (naked ATM sell needs ~₹1.9L margin), backtest + PAPER only.
+- **Research behind the design** (sources in `backend/app/premium/__init__.py`):
+  - Bhat, Pandey & Rao (2024, Journal of Futures Markets 44(8)), on NIFTY options 2017-2020:
+    short option positions earn positive, highly significant returns **overnight** and negative
+    returns **intraday**. Muravyev & Ni (2020, JFE) found the same split on S&P 500 options. This
+    explains why every intraday selling test here failed (ST-1.0, IC-1.0, CS-1.0, ET-1.0 retest):
+    sellers are paid for carrying risk while the market is shut.
+  - Jones & Shemesh (2018, Journal of Finance): option returns are significantly lower over
+    non-trading periods (mostly weekends), because prices under-count closed days.
+  - Variance risk is priced in India (Sankar et al. 2020, IREF); our OS-1.0 found NIFTY options
+    usually overpriced; VJ-1.0 says no option selling after a VIX jump.
+  - Costs at 1 lot swamped every small edge, so: at most one trade a week.
+- **Two candidates, fixed in code before any result** (`backend/app/premium/__init__.py`), both a
+  NIFTY weekly iron fly (sell ATM call + put, buy wings one ATM-straddle-price away, rounded to
+  50, min 100), 1 lot of 65, NSE daily closes from `fo_daily` 2020-01 to now (~7 years), engine
+  slippage (0.5% + 0.5 pt a leg) + full charges, VJ-1.0 filter:
+  - **A, WT-1.0 weekend theta:** sell at the close before a weekend / long weekend, buy back at
+    the next trading day's close.
+  - **B, WV-1.0 weekly volatility premium:** sell at the close the day after each weekly expiry,
+    hold to expiry (NSE settles on NIFTY's close), only when India VIX > NIFTY's HV20.
+- **Pass bar, each candidate, all six required:** >= 100 trades; PF >= 1.10; max DD < 20% of
+  ₹1L; every calendar year 2020-2026 net > 0; net > 0 at 2x slippage; net > 0 without the best 5
+  trades. Nothing is fitted, so every year is out-of-sample for these rules (caveat: VS-1.0 and
+  OS-1.0 already looked at 2020-2025 option prices). A0 / B0 (no filters) are reference rows only.
+- Commands: `tradex.sh fo-history --from 2026-10-01` (tops up missing days, skips loaded ones),
+  then `tradex.sh premium-backtest` (reports/premium_backtest.md + premium_trades.csv). Result pending.
+- If a candidate passes: check Groww's iron-fly margin, then PAPER signals only after RK approves.
+  If both fail: recorded as failed, not tuned.
