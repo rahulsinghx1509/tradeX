@@ -683,4 +683,21 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   NRML, and a 150-point hedged version for comparison.
 - Commands: `tradex.sh fut-load --years 1`, `spread-load --from 2026-10-01` (new days' option
   legs), `et-retest` (reports/et_retest.md + et_retest_trades.csv), `et-margin`
-  (reports/et_margin.md). Result pending.
+  (reports/et_margin.md). (`fut-load` is not needed: ET uses NIFTY spot + options only.)
+- **Result (RK's server run 2026-11-28, 2023-11-01 to 2026-11-27, 749 days, no missing option
+  prices): FAIL.** 243 trades, net +₹25,183, PF 1.18, max DD 11.7%, but Nov 2025 - Oct 2026 net
+  -₹1,298. Years: Nov23-Oct24 +₹11,311, Nov24-Oct25 +₹8,712, Nov25-Oct26 -₹1,298, Nov 2026 (part)
+  +₹6,457. FY2024-25 +₹11,356, FY2025-26 -₹2,373, FY2026-27 (part) +₹17,520.
+  - The 5 Nov sweep showed +₹3.2k for the third year because its window ran to 2026-11-04; the
+    2026-11-04 trade (+₹4,461) now falls in the Nov 2026 part-year. Same trades, different split.
+  - Stress: ₹1,500 / ₹2,500 stops at 1x slippage net +₹15.3k (PF 1.12) / +₹37.3k (1.25), both with
+    the third year negative. At 2x slippage (1% + 1 pt) every stop is at or below break-even (PF
+    0.87-1.01); at 3x all lose (PF 0.68-0.84, DD 50-61%).
+  - Without the best 3 / 5 / 10 trades: +₹5.0k (PF 1.04) / -₹5.5k (0.96) / -₹26.3k (0.82).
+  - Same signals with no stop and no limits: +₹30,153, PF 1.17, DD 13.6%: over the full period
+    the trailing stop and limits add nothing.
+  - Margin (Groww calculator, NIFTY ~25,600, 1 Dec 2026 expiry, 65 qty): naked ATM sell MIS
+    ₹1.89L (CE) / ₹1.90L (PE), NRML ₹1.91L / ₹1.92L (SPAN ~₹1.56L + exposure ₹33-35k): does not
+    fit ₹1L. Sell 25600 CE + buy 25750 CE (MIS): ₹49,781 (SPAN ₹9.2k, exposure ₹35k, hedge ₹5.5k).
+  - Reading: a thin edge (~₹100/trade) that rests on a few big days, disappears at double the
+    assumed slippage, and needs about twice the account in margin as a naked sell. Stays PAPER only.
