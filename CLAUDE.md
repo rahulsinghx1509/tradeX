@@ -77,6 +77,10 @@ Read these before doing any work:
 - 🔀 2026-11-28 RK: "be a top trader, create a profitable strategy": Theta Harvest TH-1.0 (code PR-1.0, docs/01 §29), hedged NIFTY iron fly held
   overnight, from research (short options earn overnight, lose intraday on NIFTY): A weekend theta, B weekly VRP
   to expiry with VIX > HV20; NSE daily options 2020-now, bar fixed first (`backend/app/premium/`, `tradex.sh premium-backtest`). Result pending.
+- 🔀 2026-11-28 RK: AD-1.0 adaptive agent (docs/01 §30), `backend/app/agent/`: each month re-picks from
+  4,212 building-block strategies (12 intraday entries incl. live trend/flat checks and trailing exits,
+  overnight/weekend/weekly option structures) on the previous 6 months after costs, trades the unseen month.
+  `tradex.sh agent-load` then `agent-backtest`. Result pending. PAPER only.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
@@ -104,5 +108,7 @@ Read these before doing any work:
 - `backend/app/meanrev/` – MR-4 mean reversion (rules R1-R31 in `__init__.py`): indicators, engine (candidates ->
   index exits -> account), report (rows, walk-forward, R26 verdict), data + loader (recorder passes like TP-1.0); `nifty.py` = MR-4N variants + futures pricing.
 - `backend/app/premium/` – PR-1.0 hedged NIFTY iron fly held overnight on fo_daily closes (rules + bar in `__init__.py`, engine, report).
+- `backend/app/agent/` – AD-1.0 adaptive agent: rules + blocks in `__init__.py`, `regime.py` (day labels from the day before),
+  `intraday.py` (signals, exits, option pricing), `swing.py` (fo_daily), `walkforward.py` (monthly pick + account), report, loader.
 - `backend/app/stocks/` – intraday stocks (NIFTY 50 + Next 50): 5-minute loader (`tradex.sh stock-load`), IS-1.0 rules (`rules.py`), engine, `stock-backtest`.
 - Tests: `cd backend && python -m pytest` (SQLite); set `TEST_DATABASE_URL` to run on PostgreSQL.

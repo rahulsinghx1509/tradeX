@@ -736,3 +736,41 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   then `tradex.sh premium-backtest` (reports/premium_backtest.md + premium_trades.csv). Result pending.
 - If a candidate passes: check Groww's iron-fly margin, then PAPER signals only after RK approves.
   If both fail: recorded as failed, not tuned.
+
+## 30. AD-1.0 adaptive agent: picks and re-tunes strategies by itself (2026-11-28)
+
+- **RK, 2026-11-28:** "Can we make an agent who will see the data and then decide which strategy
+  would work according to the scene"; "strategy will also be modified accordingly by an agent";
+  "Let's do it on paper trade"; not only the 4 existing strategies, "it can use own strategy";
+  "intraday or weekly or weekend ... try all"; "add more strategy which is in market"; "take
+  liberty in changing rules in strategy according to market in live hours". "Build it."
+- **What was built** (`backend/app/agent/`, rules in `__init__.py`, fixed before any result):
+  - The "agent" is a fixed, repeatable search (project rule: no LLM decides trades). Each month it
+    scores every candidate on the previous 6 months of trades **after costs**, keeps those that
+    pass its own checks (>= 10 trades, PF >= 1.20, net > 0, still > 0 without its best 2 trades),
+    picks up to 3 intraday (different entry types) and 2 swing (different holdings), and trades
+    them only in the next, unseen month.
+  - Building blocks: 12 intraday entries (ORB, EMA 9/21, gap fade, gap-and-go, RSI, Bollinger,
+    trend pullback, Supertrend, MACD, previous-day high/low, CPR, 30-min initial balance) x 2 stops
+    x 3 exit styles (2R target, none, trailing) x 2 time exits x 4 option structures (ATM buy, ITM
+    buy, debit spread, hedged credit spread); swing: overnight / weekend / weekly x 12
+    condition-structure pairs (iron fly, condor, credit, debit, long) on NSE's daily option file.
+  - Market condition ("scene"): trend / range days by ADX, high / low VIX days, and two **live**
+    intraday checks at each signal minute (NIFTY 0.4%+ from the open = trending, under 0.2% =
+    flat), so the strategy in use can change during market hours, but only between pre-tested
+    rule sets. Adaptive exit = trailing stop (breakeven at 1R, then trails 1R behind the best).
+  - Cap: 4,212 candidates. More candidates = more chance that some look good by luck; the monthly
+    out-of-sample test and the PAPER month are the guard.
+  - Account: ₹1L, 1 lot of 65, one intraday + one swing position at a time, max 2 intraday trades
+    a day, ₹3k day / ₹6k week loss limits, kill switch at ₹15k drawdown (no new trades for the
+    rest of the month). VJ-1.0 blocks selling on VIX-jump days. Missing data = NO TRADE.
+- **Pass bar (FULL row = intraday + swing, all seven):** >= 60 trades; PF >= 1.10; max DD < 20%
+  of ₹1L; every calendar year net > 0; net > 0 at 2x slippage (whole walk-forward re-run at 2x);
+  net > 0 without the best 5 trades; more than half the traded months net > 0. Intraday-only and
+  swing-only (since 2020) rows are information.
+- Commands: `tradex.sh pause-live`, `tradex.sh agent-load` (Groww 1m options the intraday signals
+  could trade, resumable), `tradex.sh fo-history --from 2026-10-01`, `tradex.sh start`, then
+  `tradex.sh agent-backtest` (reports/agent_backtest.md, agent_trades.csv, agent_picks.csv).
+  Result pending.
+- If FULL passes: PAPER signals from the agent's latest picks in the daily report, after RK
+  approves. If it fails: recorded as failed, not tuned. Never real orders.
