@@ -53,6 +53,8 @@ case "${1:-help}" in
   spread-backtest) script spread_backtest.py "${@:2}" && echo "Report: reports/spread_backtest.md" ;;
   risk-sweep) script risk_sweep.py "${@:2}" && echo "Report: reports/risk_sweep.md" ;;
   et-holdout) script et_holdout.py "${@:2}" && echo "Report: reports/et_holdout.md" ;;
+  et-retest)  script et_retest.py "${@:2}" && echo "Report: reports/et_retest.md (trades: reports/et_retest_trades.csv)" ;;
+  et-margin)  script et_margin.py "${@:2}" && echo "Report: reports/et_margin.md" ;;
   mr4-load)   script mr4_load.py "${@:2}" ;;
   pause-live) dc stop collector signals ema-paper && echo "Collector and PAPER engines stopped (no Groww logins). Bring them back with: deploy/tradex.sh start" ;;
   mr4-backtest) script mr4_backtest.py "${@:2}" && echo "Report: reports/mr4_backtest.md" ;;
@@ -105,6 +107,8 @@ Usage: deploy/tradex.sh <command>
   volume-backtest VF-1.0: EMA-921 / ORB / ET with and without the futures volume filter, fixed pass bar
   spread-load  SP-1.0 spreads/condor + TP-1.0 pullback: load their NIFTY option legs from Nov 2023 (after fut-load)
   et-holdout   RL-1.0 ONCE: ET ATM sell + 2% trailing stop, no expiry days, on the held-back year (reports/et_holdout.md)
+  et-retest    RT-1.0: re-test RL-1.0 (ET ATM sell, 2% trail) Nov 2023 to yesterday + stress grid (after spread-load)
+  et-margin    Groww's margin calculator for selling 1 lot of the ATM NIFTY option (no order is placed)
   risk-sweep   RL-1.0: day/week/per-trade loss limits for ₹1L on ET ATM sell + TP-1.0 (study, reports/risk_sweep.md)
   mr4-load     MR-4: load NIFTY + BANKNIFTY spot, VIX, futures volume and option legs, 3 years (resumable)
   pause-live   stop the collector and PAPER engines (so a long Groww load gets all the logins); start brings them back
