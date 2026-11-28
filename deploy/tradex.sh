@@ -57,6 +57,8 @@ case "${1:-help}" in
   et-margin)  script et_margin.py "${@:2}" && echo "Report: reports/et_margin.md" ;;
   premium-backtest) script premium_backtest.py "${@:2}" && echo "Report: reports/premium_backtest.md (trades: reports/premium_trades.csv)" ;;
   mr4-load)   script mr4_load.py "${@:2}" ;;
+  agent-load) script agent_load.py "${@:2}" ;;
+  agent-backtest) script agent_backtest.py "${@:2}" && echo "Report: reports/agent_backtest.md (trades: reports/agent_trades.csv, picks: reports/agent_picks.csv)" ;;
   pause-live) dc stop collector signals ema-paper && echo "Collector and PAPER engines stopped (no Groww logins). Bring them back with: deploy/tradex.sh start" ;;
   mr4-backtest) script mr4_backtest.py "${@:2}" && echo "Report: reports/mr4_backtest.md" ;;
   mr4-nifty)  script mr4_nifty.py "${@:2}" ;;
@@ -111,6 +113,8 @@ Usage: deploy/tradex.sh <command>
   et-retest    RT-1.0: re-test RL-1.0 (ET ATM sell, 2% trail) Nov 2023 to yesterday + stress grid (after spread-load)
   et-margin    Groww's margin calculator for selling 1 lot of the ATM NIFTY option (no order is placed)
   premium-backtest PR-1.0: hedged NIFTY iron fly held overnight (A weekend, B weekly VRP) on NSE daily options 2020-now
+  agent-load       AD-1.0: Groww 1-minute NIFTY options that the adaptive agent's intraday signals could trade (resumable)
+  agent-backtest   AD-1.0: adaptive agent walk-forward (re-picks from 4,212 strategies monthly, after costs)
   risk-sweep   RL-1.0: day/week/per-trade loss limits for ₹1L on ET ATM sell + TP-1.0 (study, reports/risk_sweep.md)
   mr4-load     MR-4: load NIFTY + BANKNIFTY spot, VIX, futures volume and option legs, 3 years (resumable)
   pause-live   stop the collector and PAPER engines (so a long Groww load gets all the logins); start brings them back
