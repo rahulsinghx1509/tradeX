@@ -664,3 +664,23 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   Out of sample: each year tested with the variant picked (best PF, >= 20 trades) on the other
   two years; the joined test years face the R26 bar. Commands: `tradex.sh mr4-load` (fetches the
   new option legs), then `tradex.sh mr4-nifty` (reports/mr4_nifty.md). Result pending.
+
+## 28. RT-1.0: re-test of the ET-1.0 option sell (RL-1.0) (2026-11-28)
+
+- **RK, 2026-11-28:** "test ET-1.0 again". Read as: re-run the RL-1.0 rule (ET-1.0 ATM sell, no
+  expiry days, ₹2,000 1R trailing stop, ₹3k day loss / ₹6k day lock / ₹6k week loss) on every
+  stored day from Nov 2023 to yesterday, on current code and data, by calendar year and by
+  financial year, with robustness checks instead of tuning.
+- **A re-check, not a new out-of-sample test.** Nov 2023 - Oct 2024 was the held-back year (used
+  2026-11-05) and Nov 2024 - Oct 2026 chose the rule. Only days from 2026-11-05 are new (a few weeks).
+- Fixed before the run (`backend/app/spreads/retest.py`): bar PF >= 1.10, max DD < 20% of ₹1L,
+  every complete Nov - Oct year net > 0 (calendar / financial part-years shown, not judged).
+  Stress grid, robustness only, no row replaces the rule: trailing stop ₹1,500 / ₹2,000 / ₹2,500
+  x slippage 1x (0.5% + 0.5 pt a side, the engine default) / 2x / 3x; the rule's trades without
+  their best 3 / 5 / 10. Reference: same signals with no stop and no limits.
+- Margin (never checked before): `tradex.sh et-margin` asks Groww's margin calculator
+  (`get_order_margin_details`, places no order) for selling 1 lot of the ATM call / put, MIS and
+  NRML, and a 150-point hedged version for comparison.
+- Commands: `tradex.sh fut-load --years 1`, `spread-load --from 2026-10-01` (new days' option
+  legs), `et-retest` (reports/et_retest.md + et_retest_trades.csv), `et-margin`
+  (reports/et_margin.md). Result pending.
