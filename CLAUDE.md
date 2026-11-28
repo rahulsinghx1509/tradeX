@@ -74,6 +74,9 @@ Read these before doing any work:
   MR-4N (`meanrev/nifty.py`, `tradex.sh mr4-nifty`): NIFTY gap fill, bigger gaps, options vs futures, leave-one-year-out. Result pending.
 - 🔀 2026-11-28 RK: re-test ET-1.0 / RL-1.0 (RT-1.0, docs/01 §28): Nov 2023 to now by calendar + financial year,
   stop x slippage stress grid, best trades removed (`tradex.sh et-retest`), Groww margin check (`tradex.sh et-margin`). Result pending.
+- 🔀 2026-11-28 RK: "be a top trader, create a profitable strategy": PR-1.0 (docs/01 §29), hedged NIFTY iron fly held
+  overnight, from research (short options earn overnight, lose intraday on NIFTY): A weekend theta, B weekly VRP
+  to expiry with VIX > HV20; NSE daily options 2020-now, bar fixed first (`backend/app/premium/`, `tradex.sh premium-backtest`). Result pending.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
@@ -100,5 +103,6 @@ Read these before doing any work:
 - `backend/app/volume/` – VF-1.0: near-month futures 1m loader (`futures.py`), RVOL + entry filter (`rvol.py`); engines take `entry_filter`.
 - `backend/app/meanrev/` – MR-4 mean reversion (rules R1-R31 in `__init__.py`): indicators, engine (candidates ->
   index exits -> account), report (rows, walk-forward, R26 verdict), data + loader (recorder passes like TP-1.0); `nifty.py` = MR-4N variants + futures pricing.
+- `backend/app/premium/` – PR-1.0 hedged NIFTY iron fly held overnight on fo_daily closes (rules + bar in `__init__.py`, engine, report).
 - `backend/app/stocks/` – intraday stocks (NIFTY 50 + Next 50): 5-minute loader (`tradex.sh stock-load`), IS-1.0 rules (`rules.py`), engine, `stock-backtest`.
 - Tests: `cd backend && python -m pytest` (SQLite); set `TEST_DATABASE_URL` to run on PostgreSQL.
