@@ -733,6 +733,28 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   trades. Nothing is fitted, so every year is out-of-sample for these rules (caveat: VS-1.0 and
   OS-1.0 already looked at 2020-2025 option prices). A0 / B0 (no filters) are reference rows only.
 - Commands: `tradex.sh fo-history --from 2026-10-01` (tops up missing days, skips loaded ones),
-  then `tradex.sh premium-backtest` (reports/premium_backtest.md + premium_trades.csv). Result pending.
+  then `tradex.sh premium-backtest` (reports/premium_backtest.md + premium_trades.csv).
+- **Result (RK's server run 2026-11-28, fo_daily 2020-01 to 2026-11-27): BOTH FAIL every check
+  except the trade count.**
+
+  | Row | Trades | Win % | Gross | Costs | Net | PF | Max DD | Net 2x slip | Net w/o best 5 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | TH-A weekend (judged) | 283 | 28 | -₹37,066 | ₹205,667 | -₹242,734 | 0.18 | ₹248,527 | -₹379,724 | -₹260,903 |
+  | TH-B weekly (judged) | 224 | 43 | +₹32,224 | ₹87,846 | -₹55,623 | 0.90 | ₹85,261 | -₹108,285 | -₹125,074 |
+  | A0 (no filter) | 346 | 28 | -₹43,517 | ₹254,994 | -₹298,511 | 0.19 | ₹304,305 | | -₹316,768 |
+  | B0 (no filter) | 346 | 43 | +₹79,072 | ₹141,276 | -₹62,203 | 0.94 | ₹157,087 | | -₹147,807 |
+
+  TH-B net by year 2020-2026: -₹1,556, -₹11,190, -₹18,338, -₹12,547, +₹14,671, -₹1,200,
+  -₹25,462. A0 lost every year (-₹31k to -₹57k). B0: +₹14.2k, -₹79.9k, -₹28.9k, -₹10.0k,
+  +₹53.6k, +₹19.6k, -₹30.8k.
+- Reading:
+  - The weekend effect is not there for a NIFTY iron fly on day closes: TH-A is negative even
+    before costs, and 8 legs cost about ₹730 a trade.
+  - A weekly volatility premium does exist before costs (B0 +₹79k, about ₹230 a trade), but
+    4-leg costs of about ₹410 a trade are bigger. The VIX > HV20 filter cut gross per trade, it
+    did not help.
+  - With VS-1.0 (monthly), ST-1.0, IC-1.0, CS-1.0 and ET-1.0, this is about 7 years of evidence
+    that hedged NIFTY premium selling at 1 lot does not beat costs, at any holding period tested.
+    Recorded as failed, not tuned.
 - If a candidate passes: check Groww's iron-fly margin, then PAPER signals only after RK approves.
   If both fail: recorded as failed, not tuned.
