@@ -73,7 +73,7 @@ Read these before doing any work:
   `backend/app/meanrev/`, `tradex.sh mr4-load` / `mr4-backtest`. Result 2026-11-27: NIFTY FAIL (PF 0.89, net −₹7.6k); BANKNIFTY FAIL (PF 0.67, net −₹31.5k, every year negative).
   MR-4N (`meanrev/nifty.py`, `tradex.sh mr4-nifty`): NIFTY gap fill, bigger gaps, options vs futures, leave-one-year-out. Result pending.
 - 🔀 2026-11-28 RK: re-test ET-1.0 / RL-1.0 (RT-1.0, docs/01 §28): Nov 2023 to now by calendar + financial year,
-  stop x slippage stress grid, best trades removed (`tradex.sh et-retest`), Groww margin check (`tradex.sh et-margin`). Result pending.
+  stop x slippage stress grid, best trades removed (`tradex.sh et-retest`), Groww margin check (`tradex.sh et-margin`). Result 2026-11-28: FAIL (243 trades, PF 1.18, but Nov25-Oct26 -₹1.3k; break-even at 2x slippage; naked ATM sell margin ~₹1.9L, hedged ~₹50k). PAPER only.
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
