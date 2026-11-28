@@ -685,7 +685,9 @@ Defaults for Milestone 1: NIFTY + BANKNIFTY; daily + 1-hour timeframes; as much 
   legs), `et-retest` (reports/et_retest.md + et_retest_trades.csv), `et-margin`
   (reports/et_margin.md). Result pending.
 
-## 29. PR-1.0: hedged NIFTY premium selling held overnight (2026-11-28)
+## 29. Theta Harvest (TH-1.0, code PR-1.0): hedged NIFTY premium selling held overnight (2026-11-28)
+
+- Name chosen 2026-11-28: TH-A = candidate A (WT-1.0, weekend), TH-B = candidate B (WV-1.0, weekly).
 
 - **RK, 2026-11-28:** "Consider yourself a top trader and lets create a strategy ... from your
   knowledge from internet ... which is profitable in past data." Constraints from the project:

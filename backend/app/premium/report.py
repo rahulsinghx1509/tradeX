@@ -29,7 +29,7 @@ def _pf(x: float) -> str:
 
 def to_markdown(trades: list[E.Trade], skipped: dict[str, int], coverage: dict, generated: str) -> str:
     rows = {k: E.summarize(E.variant(trades, k)) for k in (*P.CANDIDATES, *P.REFERENCES)}
-    L = [f"# {P.VERSION}: hedged NIFTY premium selling, held overnight", "",
+    L = [f"# Theta Harvest (TH-1.0 = {P.VERSION}): hedged NIFTY premium selling, held overnight", "",
          f"Generated {generated}. NSE daily option closes (fo_daily) from "
          f"{coverage.get('first')} to {coverage.get('last')}; NIFTY close to "
          f"{coverage.get('spot_last')}; India VIX to {coverage.get('vix_last')}. "

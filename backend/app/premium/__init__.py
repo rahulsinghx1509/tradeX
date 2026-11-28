@@ -1,4 +1,5 @@
-"""PR-1.0: two hedged NIFTY premium-selling candidates, held OVERNIGHT, on NSE's daily option file.
+"""PR-1.0 "Theta Harvest" (TH-1.0, name chosen 2026-11-28): two hedged NIFTY premium-selling
+candidates, held OVERNIGHT, on NSE's daily option file.
 
 Asked by RK 2026-11-28 ("consider yourself a top trader ... create a strategy ... profitable in
 past data"). docs/01 §29. Rules and pass bar below were written and committed BEFORE any result
@@ -94,8 +95,8 @@ DROP_BEST = 5
 FIRST_DAY = date(2020, 1, 1)
 
 CANDIDATES = {
-    "A": "WT-1.0 weekend theta: iron fly Friday close -> next trading day close, VJ-1.0 filter",
-    "B": "WV-1.0 weekly VRP: iron fly day after expiry -> expiry, VJ-1.0 + VIX > HV20 filter",
+    "A": "TH-A (WT-1.0) weekend: iron fly Friday close -> next trading day close, VJ-1.0 filter",
+    "B": "TH-B (WV-1.0) weekly: iron fly day after expiry -> expiry, VJ-1.0 + VIX > HV20 filter",
 }
 REFERENCES = {
     "A0": "A without the VJ-1.0 filter (reference only)",
