@@ -29,17 +29,27 @@ def load_events(path: Path = EVENTS_FILE) -> frozenset[date]:
         return frozenset(date.fromisoformat(r["date"].strip()) for r in rows if r.get("date"))
 
 
-def stored_daily(session: Session, symbol: str) -> pd.Series:
-    """Daily closes of an index from market_candles (the backfilled official closes)."""
+def stored_daily_frame(session: Session, symbol: str) -> pd.DataFrame:
+    """Daily high/low/close of an index from market_candles (the backfilled official candles)."""
     insts = session.scalars(select(Instrument).where(Instrument.symbol == symbol,
                                                      Instrument.instrument_type == "INDEX",
                                                      Instrument.is_sample.is_(False))).all()
-    best = pd.Series(dtype=float)
+    best = pd.DataFrame(columns=["high", "low", "close"], dtype=float)
     for inst in insts:
-        s = daily_frame(session, inst.id)["close"]
-        if len(s) > len(best):
-            best = s
+        f = daily_frame(session, inst.id)
+        if len(f) > len(best):
+            best = f
     return best
+
+
+def stored_daily(session: Session, symbol: str) -> pd.Series:
+    """Daily closes of an index from market_candles (the backfilled official closes)."""
+    return stored_daily_frame(session, symbol)["close"]
+
+
+def futures_ohlc(session: Session, start: date, end: date, symbol: str) -> pd.DataFrame:
+    """Near-month futures 1-minute candles with their open (MR-4N futures fills)."""
+    return S.load_minutes(session, symbol, start, end)
 
 
 def vix_at_open(session: Session, start: date, end: date) -> dict[date, float]:

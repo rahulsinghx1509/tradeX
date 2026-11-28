@@ -597,8 +597,9 @@ class RunResult:
 
 def run(cands: list[Candidate], instruments: dict[str, Instrument], market: Market,
         cfg: EE.Config, day_loss: float | None = DAY_LOSS, week_loss: float | None = WEEK_LOSS,
-        max_per_day: int = MAX_TRADES_DAY) -> RunResult:
-    """The account (R24, R25, R27, R28, R30). `cands` may hold one index or both."""
+        max_per_day: int = MAX_TRADES_DAY, pricer=None) -> RunResult:
+    """The account (R24, R25, R27, R28, R30). `cands` may hold one index or both.
+    `pricer(candidate)` replaces the option pricing (MR-4N futures rows); default = price()."""
     trades: list[Trade] = []
     skips: Counter = Counter()
     day_pnl: dict[date, float] = {}
@@ -626,7 +627,8 @@ def run(cands: list[Candidate], instruments: dict[str, Instrument], market: Mark
             continue
         ordered = sorted(group, key=lambda c: -c.score)  # R27: the more stretched first
         for i, c in enumerate(ordered):
-            got = price(c, instruments.get(c.underlying), market, cfg, check_risk=c.setup == "B")
+            got = pricer(c) if pricer is not None else \
+                price(c, instruments.get(c.underlying), market, cfg, check_risk=c.setup == "B")
             if isinstance(got, str):
                 skips[got] += 1
                 continue
