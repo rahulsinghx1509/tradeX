@@ -76,7 +76,8 @@ Read these before doing any work:
   stop x slippage stress grid, best trades removed (`tradex.sh et-retest`), Groww margin check (`tradex.sh et-margin`). Result 2026-11-28: FAIL (243 trades, PF 1.18, but Nov25-Oct26 -₹1.3k; break-even at 2x slippage; naked ATM sell margin ~₹1.9L, hedged ~₹50k). PAPER only.
 - 🔀 2026-11-28 RK: "be a top trader, create a profitable strategy": Theta Harvest TH-1.0 (code PR-1.0, docs/01 §29), hedged NIFTY iron fly held
   overnight, from research (short options earn overnight, lose intraday on NIFTY): A weekend theta, B weekly VRP
-  to expiry with VIX > HV20; NSE daily options 2020-now, bar fixed first (`backend/app/premium/`, `tradex.sh premium-backtest`). Result pending.
+  to expiry with VIX > HV20; NSE daily options 2020-now, bar fixed first (`backend/app/premium/`, `tradex.sh premium-backtest`).
+  Result 2026-11-28: BOTH FAIL (TH-A net -₹243k PF 0.18, negative even gross; TH-B net -₹56k PF 0.90, gross +₹32k < costs ₹88k, 6 of 7 years down).
 - 👉 Also pending: RK runs `tradex.sh intraday-probe` (Groww 1/5/15-min depth, quote fields, NSE member lists),
   then collect the 100 stocks and show live intraday charts.
 
